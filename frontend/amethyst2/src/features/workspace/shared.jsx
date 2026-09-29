@@ -1,0 +1,10 @@
+import { useState } from 'react';
+import { api } from '../../lib/api';
+import { date } from './helpers';
+export function ActionForm({path,children,onSaved,method='POST',transform,submitLabel='Save'}) {
+ const [error,setError]=useState(''),[busy,setBusy]=useState(false);
+ return <form className="record-form" onSubmit={async e=>{e.preventDefault();const form=e.currentTarget;setBusy(true);setError('');try{const values=Object.fromEntries(new FormData(form));const result=await api(path,{method,body:transform?transform(values,form):values});onSaved?.(result);form.reset()}catch(e){setError(e.message)}finally{setBusy(false)}}}>{children}{error&&<p role="alert" className="error">{error}</p>}<button className="primary" disabled={busy}>{busy?'Saving…':submitLabel}</button></form>
+}
+export function Upload({path,onSaved,accept,department,projects,label='Upload file'}) {return <ActionForm path={path} onSaved={onSaved} transform={(_,form)=>new FormData(form)}>{department&&<label>Department<input name="department" defaultValue={department==='*'?'General':department} required/></label>}<>{projects&&<label>Project<select name="project"><option value="">No linked project</option>{projects.map(p=><option key={p._id} value={p._id}>{p.title}</option>)}</select></label>}</><label>{label}<input name="file" type="file" accept={accept} required/></label></ActionForm>}
+export function Members({members,name='owner',required=true}) {return <select name={name} required={required}><option value="">Select member</option>{members.filter(m=>m.status==='active').map(m=><option key={m._id} value={m._id}>{m.name}{m.loginEnabled===false?' (directory)':''} · {m.department}</option>)}</select>}
+export function Comments({kind,record,members,onSaved}) {return <section><h3>Discussion</h3>{record.comments?.map(c=><article className="note" key={c._id}><strong>{members.find(m=>m._id===c.author)?.name||'Member'}</strong><small>{date(c.createdAt)}</small><p>{c.body}</p></article>)}<ActionForm path={`/${kind}/${record._id}/comments`} onSaved={onSaved}><label>Add comment<textarea name="body" required maxLength={10000}/></label></ActionForm></section>}

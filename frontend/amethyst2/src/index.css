@@ -1,0 +1,9 @@
+:root { font-family: Georgia, 'Times New Roman', serif; color: #f2effa; background: #0d1019; font-synthesis: none; text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; }
+button, input, select, textarea { font: inherit; }
+button { cursor: pointer; }
+button:focus-visible, input:focus-visible { outline: 2px solid #ccbdff; outline-offset: 6px; }
+button:disabled { cursor: default; }
+
+pre, code, kbd, samp, input::file-selector-button { font-family: Georgia, 'Times New Roman', serif; }

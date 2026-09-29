@@ -1,0 +1,41 @@
+import mongoose from 'mongoose';
+const { Schema } = mongoose;
+const ref = (name, required = false) => ({ type: Schema.Types.ObjectId, ref: name, required });
+const sourceReference = new Schema({ key: String, file: String, row: Number, ownerLabel: String, number: String, submittedLabel: String, startLabel: String, dueLabel: String, daysSinceUpdate: Number, sowReferences: [String], warnings: [String] }, { _id: false });
+const base = { sourceReference: { type: sourceReference, default: undefined }, organization: { type: String, required: true, index: true }, archived: { type: Boolean, default: false } };
+const options = { timestamps: true, optimisticConcurrency: true, strict: 'throw' };
+export const User = mongoose.model('User', new Schema({ organization: { type: String, required: true }, name: { type: String, required: true, maxlength: 120 }, loginEnabled: { type: Boolean, default: true }, sourceReference: { type: sourceReference, default: undefined }, email: { type: String, required: true, lowercase: true, unique: true }, passwordHash: { type: String, required: true, select: false }, role: { type: String, enum: ['member', 'admin'], default: 'member' }, department: { type: String, default: 'General' }, status: { type: String, enum: ['pending', 'active'], default: 'active' } }, options));
+const projectAccessSchema = new Schema({
+ organization: { type: String, required: true, index: true },
+ project: ref('Project', true), user: ref('User', true),
+ status: { type: String, enum: ['pending', 'approved', 'denied', 'revoked'], default: 'pending' },
+ reason: { type: String, default: '', maxlength: 2000 },
+ reviewer: ref('User'), reviewNote: { type: String, default: '', maxlength: 2000 }, reviewedAt: Date,
+}, options);
+projectAccessSchema.index({ organization: 1, project: 1, user: 1 }, { unique: true });
+export const ProjectAccess = mongoose.model('ProjectAccess', projectAccessSchema);
+export const Session = mongoose.model('Session', new Schema({ tokenHash: { type: String, unique: true }, user: ref('User', true), expiresAt: { type: Date, expires: 0 } }));
+const comment = new Schema({ author: ref('User', true), body: { type: String, required: true, maxlength: 10000 }, parent: Schema.Types.ObjectId }, { timestamps: true });
+const action = new Schema({ title: { type: String, required: true, maxlength: 500 }, done: { type: Boolean, default: false }, creator: ref('User', true) }, { timestamps: true });
+const work = { ...base, title: { type: String, required: true, maxlength: 500 }, description: { type: String, default: '', maxlength: 30000 }, department: { type: String, required: true }, team: { type: String, default: '' }, creator: ref('User', true), owner: ref('User'), priority: { type: String, enum: ['Critical', 'High', 'Medium', 'Low'], default: 'Medium' }, status: { type: String, default: 'todo' }, startDate: Date, dueDate: Date, comments: { type: [comment], default: [] } };
+const taskSchema = new Schema({ ...work, status: { type: String, enum: ['todo', 'in_progress', 'blocked', 'in_review', 'done', 'cancelled'], default: 'todo' }, project: ref('Project'), difficulty: { type: Number, min: 1, max: 5, default: 3, validate: Number.isInteger }, actionItems: { type: [action], default: [] }, blockedReason: String, completedAt: Date, dependencies: [ref('Task')], assignmentHistory: [{ actor: ref('User'), previous: ref('User'), next: ref('User'), at: Date }], sourceProposal: { type: Schema.Types.ObjectId, unique: true, sparse: true } }, options);
+taskSchema.index({ organization: 1, owner: 1, archived: 1, dueDate: 1 });
+taskSchema.index({ organization: 1, department: 1, archived: 1, createdAt: -1 });
+export const Task = mongoose.model('Task', taskSchema);
+export const Project = mongoose.model('Project', new Schema({ ...work, featured: { type: Number, min: 1, max: 3 } }, options));
+export const Event = mongoose.model('Event', new Schema({ ...work, endDate: { type: Date, required: true }, timezone: { type: String, default: 'America/Chicago' }, location: String, allDay: { type: Boolean, default: false }, attendees: [ref('User')], project: ref('Project') }, options));
+export const Topic = mongoose.model('Topic', new Schema({ ...work, category: { type: String, default: 'Ideas' }, project: ref('Project') }, options));
+export const Meeting = mongoose.model('Meeting', new Schema({ ...work, heldAt: { type: Date, required: true }, transcript: { type: String, default: '', maxlength: 500000 }, summary: { type: String, default: '' }, notes: { type: String, default: '' }, generationMethod: String, project: ref('Project') }, options));
+export const Roadmap = mongoose.model('Roadmap', new Schema({ ...work, project: ref('Project'), phase: { type: String, enum: ['EP 1.0', 'EP 2.0', 'EP 3.0'], default: 'EP 1.0' }, kind: { type: String, enum: ['workstream', 'milestone'], default: 'workstream' } }, options));
+const step = new Schema({ label: { type: String, required: true }, reviewer: ref('User', true), status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' } });
+export const Cinema = mongoose.model('Cinema', new Schema({ ...work, status: { type: String, enum: ['draft', 'in_review', 'changes_requested', 'approved', 'rejected'], default: 'draft' }, number: { type: String, required: true, unique: true }, task: ref('Task'), project: ref('Project'), rubric: { type: String, required: true, maxlength: 30000 }, steps: { type: [step], required: true, validate: function(steps) { return (this.status === 'draft' && steps.length === 0) || (steps.length > 0 && steps.length <= 20); } }, currentStep: { type: Number, default: 0, min: 0, validate: Number.isInteger }, round: { type: Number, default: 1, min: 1, validate: Number.isInteger }, history: [{ actor: ref('User'), event: String, reason: String, from: ref('User'), to: ref('User'), at: Date }], previousRounds: [Schema.Types.Mixed], executionStatus: { type: String, enum: ['not_started', 'in_progress', 'completed'], default: 'not_started' } }, options));
+export const Avp = mongoose.model('Avp', new Schema({ ...base, task: { ...ref('Task', true), unique: true }, cinema: ref('Cinema'), workflowStatus: { type: String, default: 'Action needed' }, useCaseNeeded: { type: String, enum: ['Yes', 'No', 'Unknown'], default: 'Unknown' }, notes: { type: [comment], default: [] } }, options));
+export const Proposal = mongoose.model('Proposal', new Schema({ ...base, project: ref('Project'), department: { type: String, required: true }, creator: ref('User', true), source: { type: String, required: true }, batch: ref('Batch'), meeting: ref('Meeting'), row: Number, original: Schema.Types.Mixed, draft: { title: String, description: String, priority: String, difficulty: Number, dueDate: Date, owner: ref('User') }, warnings: [String], status: { type: String, enum: ['pending', 'approved', 'denied'], default: 'pending' }, task: ref('Task'), reviewer: ref('User'), reason: String, reviewedAt: Date }, options));
+export const Batch = mongoose.model('Batch', new Schema({ ...base, project: ref('Project'), creator: ref('User', true), department: String, filename: String, sheets: [String], rows: Schema.Types.Mixed, mapping: Schema.Types.Mixed, status: { type: String, enum: ['mapped', 'pending', 'failed'], default: 'pending' }, error: String }, options));
+export const File = mongoose.model('File', new Schema({ ...base, uploader: ref('User', true), cinema: ref('Cinema'), filename: String, contentType: String, bytes: { type: Buffer, select: false }, version: Number }, options));
+export const Audit = mongoose.model('Audit', new Schema({ organization: { type: String, required: true }, actor: ref('User', true), resource: String, resourceId: Schema.Types.ObjectId, action: String, detail: Schema.Types.Mixed }, { timestamps: true }));
+export const models = { tasks: Task, projects: Project, events: Event, topics: Topic, meetings: Meeting, roadmap: Roadmap, cinemas: Cinema };
+
+const notificationSchema = new Schema({ organization: { type: String, required: true }, recipient: ref('User', true), sender: ref('User', true), task: ref('Task', true), title: { type: String, required: true }, readAt: Date }, options);
+notificationSchema.index({ organization: 1, recipient: 1, createdAt: -1 });
+export const Notification = mongoose.model('Notification', notificationSchema);

@@ -1,0 +1,44 @@
+.entry-page { min-height: 100svh; overflow: hidden; display: flex; flex-direction: column; color: #f2effa; color-scheme: dark; background: radial-gradient(ellipse at 50% 46%, #30264b 0%, #161827 38%, #0d1019 73%); }
+.entry-brand { display: flex; align-items: center; gap: 12px; padding: 26px 5vw; font-size: 12px; font-weight: 600; letter-spacing: .17em; }
+.brand-gem { color: #c8b3ff; font-size: 30px; }
+.brand-caption { color: #9693a6; font-size: 9px; margin-left: auto; }
+.crystal-entry { flex: 1; text-align: center; padding: 24px 20px 36px; }
+.entry-page .eyebrow { color: #b6a4d7; font-size: 9px; font-weight: 600; letter-spacing: .24em; margin: 0 0 16px; }
+.entry-page h1 { font-family: Georgia, 'Times New Roman', serif; font-weight: 400; font-size: clamp(30px, 4vw, 50px); letter-spacing: -.035em; margin: 0 0 15px; }
+.entry-description { color: #a6a3b6; font-size: 14px; line-height: 1.6; margin: 0; }
+.crystal-button { display: block; position: relative; width: min(48vh, 440px, 80vw); aspect-ratio: 1; margin: 35px auto 25px; border: 0; padding: 0; background: none; -webkit-tap-highlight-color: transparent; touch-action: manipulation; filter: drop-shadow(0 15px 35px #05050a) drop-shadow(0 0 22px #a58bed25); transition: filter .3s; }
+.crystal-button:hover { background: transparent; filter: drop-shadow(0 15px 35px #05050a) drop-shadow(0 0 30px #a58bed55); }
+.crystal-button:disabled { opacity: 1; }
+.crystal-button:active:not(:disabled) .crystal-art { transform: scale(.975); }
+.crystal-art { display: block; width: 100%; height: 100%; overflow: visible; transition: transform .12s; }
+.crystal-piece { transform-box: view-box; }
+.crystal-cracks { filter: drop-shadow(0 0 .6px #c5a7ff); }
+.crystal-glint { position: absolute; left: 30%; top: 16%; color: #fff; font-size: 32px; pointer-events: none; text-shadow: 0 0 18px #cfbaff; animation: glint 4s ease-in-out infinite; }
+.impact-ring { position: absolute; width: 20px; height: 20px; border: 1px solid #eee2ff; border-radius: 50%; pointer-events: none; animation: impact .5s ease-out forwards; }
+.tap-label { font-size: 12px; color: #dfd8ed; letter-spacing: .04em; margin: 0 0 16px; }
+.hit-progress { display: flex; justify-content: center; gap: 9px; }
+.hit-progress span { width: 6px; height: 6px; transform: rotate(45deg); background: #ffffff20; border: 1px solid #ffffff30; transition: background .2s, box-shadow .2s; }
+.hit-progress .is-hit { background: #c5a3ff; box-shadow: 0 0 10px #b89be5; }
+.entry-page .text-button { background: none; border: 0; padding: 12px; margin-top: 15px; color: #aaa5bd; font-size: 11px; }
+.entry-page .text-button:hover { background: transparent; color: #fff; }
+.entry-footer { display: flex; justify-content: space-between; gap: 20px; padding: 22px 5vw; border-top: 1px solid #ffffff09; color: #928da4; font-size: 10px; }
+.entry-footer span:last-child { font-size: 8px; letter-spacing: .16em; }
+.is-breaking .crystal-piece { animation: shatter 1s cubic-bezier(.2,.65,.3,1) var(--delay) both; }
+.is-breaking .crystal-glint { display: none; }
+.login-card { width: min(440px, calc(100% - 40px)); margin: auto; padding: 38px 0 55px; text-align: center; animation: reveal .65s ease-out both; }
+.login-logo { width: 76px; height: 76px; object-fit: contain; margin-bottom: 25px; filter: drop-shadow(0 0 24px #a68bde50); }
+.login-gem { display: block; font-size: 64px; color: #c9b4ff; margin-bottom: 25px; text-shadow: 0 0 30px #a68bde70; }
+.login-card h1 { font-size: 42px; }
+.login-card form { margin-top: 32px; text-align: left; }
+.login-card label { display: grid; gap: 9px; margin: 20px 0 9px; color: #ded8eb; font-size: 12px; }
+.login-card input { width: 100%; padding: 14px 16px; border: 1px solid #ffffff24; border-radius: 8px; background: #ffffff05; color: #f4edff; font-size: 14px; }
+.login-card input::placeholder { color: #8b839d; }
+.sign-in-button { display: flex; justify-content: space-between; width: 100%; margin-top: 25px; padding: 15px 18px; border: 0; border-radius: 8px; background: #cfbaff; color: #251837; font-size: 13px; font-weight: 600; }
+.sign-in-button:hover { background: #dfcfff; }
+.form-message { font-size: 12px; color: #d8c7ef; line-height: 1.6; }
+@keyframes glint { 0%, 100% { opacity: .3; transform: scale(.6); } 50% { opacity: 1; transform: scale(1); } }
+@keyframes impact { from { opacity: .9; transform: translate(-50%, -50%) scale(.4); } to { opacity: 0; transform: translate(-50%, -50%) scale(8); } }
+@keyframes shatter { to { transform: translate(var(--dx), var(--dy)) rotate(var(--turn)) scale(.35); opacity: 0; } }
+@keyframes reveal { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+@media (max-width: 600px) { .brand-caption { display: none; } .entry-brand { padding: 18px 6vw; } .crystal-entry { padding-top: 28px; } .entry-description { font-size: 12px; } .crystal-button { margin-block: 35px; } .entry-footer { font-size: 9px; } }
+@media (prefers-reduced-motion: reduce) { .entry-page *, .entry-page *::before, .entry-page *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } .is-breaking .crystal-piece { animation: none; opacity: 0; } }

@@ -1,0 +1,1 @@
+export default function Feedback({loading,error,empty}) {return <>{loading&&<p role="status">Loading…</p>}{error&&<p className="error" role="alert">{error}</p>}{!loading&&!error&&empty&&<p className="empty">No records yet. Create one to get started.</p>}</>}
