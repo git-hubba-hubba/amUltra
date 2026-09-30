@@ -36,12 +36,3 @@ npm test --prefix backend
 
 The integration suite starts a temporary MongoDB replica set and may download a MongoDB binary on its first run. It covers authentication, department permissions, organization isolation, claim races, stale edits, intake transactions, approval order/handoffs, calendar overlap, project summaries, transcript proposals, immediate signup access, project-specific grants, revocation, and cross-project permission boundaries.
 
-For deployment, serve the built frontend and `/api` under the same HTTPS origin, set `NODE_ENV=production` and `APP_ORIGIN`, and use a persistent MongoDB replica set. Database connection credentials belong in environment configuration.
-
-## Screenshot reference data
-
-`backend/data/expert-path-screenshots.js` transcribes the supplied AVP, Cinema, and EP roadmap screenshots. `npm run import:screenshots` from `backend` previews the target; `npm run import:screenshots -- --apply` inserts missing source records. Stable IDs make reruns safe and preserve subsequent edits.
-
-Mapping: 40 roadmap workstreams become Roadmap entries and linked Tasks, eight AVP rows become Tasks plus AVP records, four Cinema rows become draft Cinema requests and project records, and the three EP phases plus the AVP tracker provide the remaining project groupings. The 27 named people are directory profiles with login disabled; an extra technical profile attributes imported source notes. Department grouping uses the roadmap’s Business Care & Sales label, with team labels from the screenshots. Individual departments remain Unspecified.
-
-Each record retains its source file/row, original owner labels, and ambiguity notes. Month-only roadmap dates use month boundaries for chart rendering. AVP dates with no year remain labels and missing deadlines remain unset. The duplicated source Cinema number is retained on both rows with distinct internal IDs. Referenced SOW filenames are shown as unavailable attachments; no document is fabricated. Cinema approval steps must be configured with real login accounts before submission.
