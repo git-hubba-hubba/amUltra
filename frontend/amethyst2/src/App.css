@@ -35,27 +35,28 @@
 .dateFilter:focus-within { outline: 2px solid #98adff; outline-offset: 3px; }
 .taskTools { display: flex; justify-content: flex-end; gap: 12px; min-height: 32px; flex-wrap: wrap; margin: 8px 0 24px; }
 .dashboard .taskTools button { padding: 3px 12px; font-size: 15px; }
-.taskMajor { position: relative; height: 260px; margin-bottom: 28px; font-family: Georgia, 'Times New Roman', serif; perspective: 1400px; }
-.taskFlip { width: 100%; height: 100%; position: relative; transform-style: preserve-3d; transition: transform .55s ease; }
+/* Task cards grow with their content while retaining the two-sided flip. */
+.taskMajor { position: relative; margin-bottom: 24px; font-family: Georgia, 'Times New Roman', serif; perspective: 1400px; }
+.taskFlip { width: 100%; min-height: 280px; position: relative; transform-style: preserve-3d; transition: transform .55s ease; }
 .taskMajor.flipped .taskFlip { transform: rotateY(180deg); }
-.taskFace { position: absolute; inset: 0; border: 1px solid white; border-radius: 24px; background: black; backface-visibility: hidden; }
-.taskFront { display: flex; justify-content: space-between; }
-.taskHolder { position: relative; width: 60%; min-width: 0; padding: 48px 24px 36px; text-align: left; }
-.taskBadge { position: absolute; top: 14px; left: 20px; right: 20px; display: flex; justify-content: space-between; gap: 10px; font-size: 14px; }
-.taskTitle { font-size: clamp(20px, 1.6vw, 24px); line-height: 1.35; margin: 16px 0 20px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.taskHolder hr { border: 0; border-top: 1px solid #596572; margin: 0; }
-.taskDesc { font-size: 15px; line-height: 1.6; margin: 18px 0 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.dashboard .taskFlipButton { position: absolute; right: 12px; bottom: 10px; padding: 2px 6px; border: 0; font-size: 14px; color: lightslategray; background: black; }
-.taskManager { width: 35%; display: flex; flex-direction: column; padding: 24px 24px 24px 0; }
-.timer { margin: 0; text-align: right; font-size: 28px; font-variant-numeric: tabular-nums; line-height: 1.1; }
-.timer small { display: block; font-size: 13px; line-height: 1.35; }
-.taskOwned { text-align: right; font-size: 12px; margin-top: 6px; color: #a4c4ad; }
+.taskFace { border: 1px solid white; border-radius: 24px; background: black; backface-visibility: hidden; }
+.taskFront { position: relative; display: grid; grid-template-columns: minmax(0, 1fr) minmax(210px, .65fr); gap: 28px; padding: 24px; min-height: inherit; }
+.taskHolder { min-width: 0; display: flex; flex-direction: column; gap: 16px; text-align: left; }
+.taskBadge { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.taskTitle { font-size: clamp(20px, 1.6vw, 24px); line-height: 1.35; margin: 0; overflow-wrap: anywhere; }
+.taskHolder hr { width: 100%; border: 0; border-top: 1px solid #596572; margin: 0; }
+.taskDesc { font-size: 15px; line-height: 1.6; margin: 0; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.dashboard .taskFlipButton { align-self: flex-start; margin-top: auto; padding: 6px 0; border: 0; font-size: 14px; color: lightslategray; background: black; }
+.taskManager { min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+.timer { display: grid; gap: 6px; margin: 0; text-align: right; font-size: 24px; font-variant-numeric: tabular-nums; line-height: 1.35; overflow-wrap: anywhere; }
+.dashboard .timer small { font-size: 12px; line-height: 1.5; }
+.taskOwned { text-align: right; font-size: 12px; margin: 0; color: #a4c4ad; }
 .timer.overdue { color: #d78888; }
-.tmBtns { display: flex; flex-direction: column; gap: 16px; margin-top: auto; padding-right: 24px; }
-.organizer { display: flex; justify-content: space-around; gap: 16px; }
-.dashboard .taskImageButton { border: 0; padding: 0; background: black; line-height: 0; }
-.tm-smBtn { display: block; width: 40px; height: 40px; object-fit: contain; border: 1px solid gray; border-radius: 16px; }
-.taskBack { transform: rotateY(180deg); padding: 20px 28px; overflow: auto; }
+.tmBtns { display: flex; flex-direction: column; align-self: flex-end; gap: 12px; margin-top: auto; padding-top: 8px; }
+.organizer { display: flex; gap: 12px; }
+.dashboard .taskImageButton { flex-shrink: 0; border: 0; padding: 0; background: black; line-height: 0; }
+.tm-smBtn { display: block; width: 44px; height: 44px; padding: 10px; border: 1px solid gray; border-radius: 12px; }
+.taskBack { position: absolute; inset: 0; transform: rotateY(180deg); padding: 24px; overflow: auto; }
 .taskBack .record-form { display: flex; align-items: end; gap: 16px; }
 .taskBack .record-form label { flex: 1; }
 .taskBack .section-heading { margin-top: 0; }
@@ -162,17 +163,10 @@
 @media (max-width: 1100px) {
   .gbLeft { padding: 30px 12px; }
   .stContent, .dashboard .stMain { font-size: 18px; }
-  .stImg { width: 38px; height: 58px; }
+  .stImg { width: 38px; height: 38px; }
   .gbMid { padding: 24px; }
   .taskNav { gap: 15px; }
   .taskSlice { font-size: 24px; }
-  .taskManager { width: 26%; }
-  .timer { font-size: 26px; }
-  .tmBtns { padding-right: 10px; }
-  .tm-smBtn { width: 40px; height: 40px; }
-  .taskTitle { font-size: 22px; }
-  .taskDesc { font-size: 15px; }
-  .taskBadge { font-size: 12px; }
   .dashboard .summary-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 700px) {
@@ -185,22 +179,14 @@
   .gbMid { width: 77%; border-width: 3px; padding: 14px; }
   .stMain { flex-direction: column; justify-content: start; gap: 12px; margin-bottom: 30px; }
   .stContent, .dashboard .stMain { font-size: 14px; }
-  .stImg { width: 32px; height: 52px; }
+  .stImg { width: 32px; height: 32px; }
   .taskNav { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .taskSlice { width: 100%; font-size: 20px; }
-  .taskMajor { height: 360px; margin-bottom: 32px; }
-  .taskFront { flex-direction: column; }
-  .taskHolder { width: 100%; height: 58%; padding: 38px 12px 25px; }
-  .taskTitle { margin: 16px 0 20px; font-size: 20px; }
-  .taskDesc { margin: 20px 0 0; font-size: 14px; }
-  .taskBadge { font-size: 10px; left: 12px; right: 12px; }
-  .taskManager { width: 100%; height: 42%; flex-direction: row; align-items: center; justify-content: space-around; padding: 5px 12px 15px; gap: 8px; }
-  .timer { font-size: 24px; text-align: left; }
-  .timer small { font-size: 10px; }
-  .tmBtns { margin: 0; gap: 10px; padding-right: 0; }
-  .organizer { gap: 10px; }
-  .tm-smBtn { width: 40px; height: 40px; border-radius: 10px; }
-  .taskBack { padding: 15px; }
+  .taskFront { gap: 20px; padding: 18px; }
+  .taskHolder { gap: 12px; }
+  .taskTitle { font-size: 20px; }
+  .taskDesc { font-size: 14px; }
+  .taskBack { padding: 18px; }
   .taskBack .record-form { display: grid; }
   .dashboard .card-grid, .dashboard .stats { grid-template-columns: 1fr; }
   .dashboard .featured { flex-direction: column; }
@@ -227,7 +213,7 @@
 .dashboard .overview-actions li + li { margin-top: 8px; }
 
 /* Keep the action checklist visible while its contents scroll. */
-.taskMajor.flipped { height: 380px; }
+.taskMajor.flipped .taskFlip { min-height: 400px; }
 .dashboard .taskBack { display: flex; flex-direction: column; gap: 12px; overflow: hidden; }
 .dashboard .taskBack .section-heading { margin: 0; align-items: flex-start; gap: 12px; }
 .dashboard .taskBack .section-heading > div { min-width: 0; }
@@ -246,7 +232,13 @@
 .dashboard .taskBack .record-form label { min-width: 140px; font-size: 13px; }
 .dashboard .taskBack .record-form input { font-size: 14px; }
 .dashboard .taskBack .record-form .error { flex-basis: 100%; margin: 0; }
-@media (max-width: 700px) { .taskMajor.flipped { height: 470px; } }
+@media (max-width: 900px) {
+  .taskFront { grid-template-columns: minmax(0, 1fr); }
+  .timer, .taskOwned { text-align: left; }
+  .taskManager { padding-top: 16px; border-top: 1px solid #596572; }
+  .tmBtns { align-self: flex-start; flex-direction: row; flex-wrap: wrap; margin-top: 0; }
+}
+@media (max-width: 700px) { .taskMajor.flipped .taskFlip { min-height: 480px; } }
 body{
   font-family: serif;
 }

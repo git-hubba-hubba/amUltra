@@ -35,6 +35,18 @@ function LeftBar({currentDisplay, setCurrentDisplay}) {
   ]
   return (
     <>
+      <svg width="0" height="0" aria-hidden="true" focusable="false" style={{ position: 'absolute' }}>
+        <defs>
+          <filter id="sidebar-blue-white" colorInterpolationFilters="sRGB">
+            <feColorMatrix type="saturate" values="0" />
+            <feComponentTransfer>
+              <feFuncR type="table" tableValues="0.157 1" />
+              <feFuncG type="table" tableValues="0.408 1" />
+              <feFuncB type="table" tableValues="0.533 1" />
+            </feComponentTransfer>
+          </filter>
+        </defs>
+      </svg>
       {sidetabs.map((tab,index)=>{
         return(
           <div key={index}>

@@ -110,7 +110,8 @@
 .app-theme .dashboard .navNput { background: var(--soft); color: var(--text); border-color: var(--line); }
 .app-theme .dashboard .navNput::placeholder { color: var(--muted); }
 .app-theme .dashboard .navIconButton:hover { background: var(--soft); }
-.app-theme .navIcons, .app-theme .stImg, .app-theme .tm-smBtn, .app-theme .login-logo { filter: saturate(.6); }
+.app-theme .navIcons, .app-theme .tm-smBtn, .app-theme .login-logo { filter: saturate(.6); }
+.app-theme .stImg { background: #fff; filter: url(#sidebar-blue-white); }
 .app-theme .dashboard .taskCompleted .tm-smBtn { filter: grayscale(1); }
 .app-theme .dashboard .taskCompleted .taskFlipButton, .app-theme .dashboard .taskCompleted .taskImageButton { background: transparent; color: var(--muted); }
 .app-theme .dashboard .reviewNotification { background: var(--accent); color: var(--surface); border: 1px solid var(--trim); }
@@ -184,3 +185,11 @@
 }
 
 .app-theme .deadline-countdown { font-size: clamp(16px, 1.7vw, 26px); font-variant-numeric: tabular-nums; }
+
+/* Freeze controls remain outside the crystal-covered card. */
+.app-theme .taskMajor.taskFrozen { margin-top: 42px; }
+.taskFreezeControls { position: absolute; top: -32px; left: 24px; right: 24px; z-index: 2; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; pointer-events: none; }
+.taskFrozenBadge { color: #18587a; background: #e5f8ff; border: 1px solid #8bcce7; border-radius: 12px; padding: 3px 9px; font-size: 11px; font-weight: 700; }
+@media (max-width: 700px) {
+  .taskFreezeControls { left: 12px; right: 12px; gap: 4px; }
+}

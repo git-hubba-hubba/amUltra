@@ -10,7 +10,7 @@ export async function audit(req, resource, id, action, detail) { await Audit.cre
 export async function getItem(req, Model, id) { requireValue(mongoose.isValidObjectId(id),'Invalid record ID'); const item=await Model.findOne({...scope(req),_id:id}); requireValue(item,'Record not found',404); return item; }
 export async function validateUser(req, id) { requireValue(mongoose.isValidObjectId(id),'Invalid member'); const user=await User.findOne({_id:id,organization:req.user.organization,status:{$in:['active','pending']}}); requireValue(user,'Active member not found'); return user; }
 const fields = {
- tasks: ['title','description','department','team','priority','difficulty','status','startDate','dueDate','project','blockedReason'],
+ tasks: ['frozen','title','description','department','team','priority','difficulty','status','startDate','dueDate','project','blockedReason'],
  projects: ['title','description','department','team','priority','status','startDate','dueDate','featured'],
  events: ['title','description','department','startDate','endDate','timezone','location','allDay','project'],
  topics: ['title','description','department','category','project'],
@@ -58,6 +58,7 @@ resources.post('/:kind', async (req, res, next) => {
  const kind = req.params.kind;
  if (!fields[kind]) return next();
  const data = pick(req.body, kind);
+ if (kind === 'tasks' && Object.hasOwn(data, 'frozen')) requireValue(typeof data.frozen === 'boolean', 'Frozen must be a boolean');
  requireValue(typeof data.department === 'string' && data.department.trim() && data.department !== '*', 'Department required');
  await validateProjectLink(req, data);
  requireValue(isAdmin(req.user, data.department, data.project) || (req.user.department === data.department && !adminOnly.has(kind)), 'Project or department permission required', 403);
@@ -77,10 +78,12 @@ resources.patch('/:kind/:id', async (req, res, next) => {
  if (!fields[kind]) return next();
  const item = await getItem(req, models[kind], req.params.id);
  const managesItem = isAdmin(req.user, item.department, recordProject(item, kind));
- requireValue(canEdit(req.user, item, kind) && (!adminOnly.has(kind) || managesItem), 'Not permitted', 403);
+ const freezeOnly = kind === 'tasks' && Object.hasOwn(req.body, 'frozen') && Object.keys(req.body).every(key => ['frozen', '__v'].includes(key));
+ requireValue(freezeOnly || (canEdit(req.user, item, kind) && (!adminOnly.has(kind) || managesItem)), 'Not permitted', 403);
  requireValue(Number.isInteger(req.body.__v) && req.body.__v === item.__v, 'Record changed; refresh before saving', 409);
  requireValue(!Object.hasOwn(req.body, 'owner') || ['projects', 'roadmap'].includes(kind), 'Use admin assignment', 403);
  const data = pick(req.body, kind);
+ if (kind === 'tasks' && Object.hasOwn(data, 'frozen')) requireValue(typeof data.frozen === 'boolean', 'Frozen must be a boolean');
  if (Object.hasOwn(req.body, 'owner') && ['projects', 'roadmap'].includes(kind)) {
   requireValue(managesItem, 'Admin assignment required', 403);
   if (req.body.owner) await validateUser(req, req.body.owner);

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import TaskFreezeSurface from './TaskFreezeSurface';
 import { api } from '../lib/api';
 import { useResource } from '../lib/useResource';
 import Feedback from '../features/shared/Feedback';
@@ -35,7 +36,7 @@ function GeneratedTask({ item, user, members, refresh }) {
         <details><summary>Original spreadsheet row</summary><pre>{JSON.stringify(item.original, null, 2)}</pre></details>
       </details> : <p>The responsible admin has been notified in the app.</p>}
     </>}
-    {item.task && <a href={`/?task=${item.task}`}>Open task</a>}
+    {item.task && <TaskFreezeSurface id={item.task}><strong>{item.draft.title}</strong><p>Triple-click to freeze or resume production.</p><a href={`/?task=${item.task}`}>Open task</a></TaskFreezeSurface>}
     {error && <p className="error" role="alert">{error}</p>}
   </article>;
 }

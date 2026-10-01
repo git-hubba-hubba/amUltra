@@ -461,3 +461,55 @@ test('completion filtering and ordering apply before task pagination', async () 
   assert.ok(incomplete.body.items.every(task => task.status !== 'done'));
   await clients.Alice.get(`${base}&completion=invalid`).expect(400);
 });
+
+test('roadmap uploads create entries atomically and enforce admin scope', async () => {
+  const { Roadmap } = await import('../src/models.js');
+  const csv = 'Title,Start,Target,Phase,Type,Status\nImported launch,2027-01-01,2027-02-01,EP 2.0,workstream,Planned\nImported milestone,2027-02-01,2027-02-01,EP 2.0,milestone,Complete';
+  await clients.Bob.post('/api/roadmap/import').field('department', 'Engineering').attach('file', Buffer.from(csv), 'roadmap.csv').expect(403);
+  await clients['Department admin'].post('/api/roadmap/import').field('department', 'Sales').attach('file', Buffer.from(csv), 'roadmap.csv').expect(403);
+  const response = await clients.Admin.post('/api/roadmap/import').field('department', 'Engineering').attach('file', Buffer.from(csv), 'roadmap.csv').expect(201);
+  assert.equal(response.body.generated, 2);
+  const rows = await Roadmap.find({ title: /^Imported / });
+  assert.equal(rows.length, 2);
+  assert.equal(rows.find(row => row.kind === 'milestone').status, 'Complete');
+  const count = await Roadmap.countDocuments();
+  const invalid = csv.replace('Imported milestone,2027-02-01,2027-02-01', 'Imported milestone,2027-02-01,2027-03-01');
+  const failed = await clients.Admin.post('/api/roadmap/import').field('department', 'Engineering').attach('file', Buffer.from(invalid), 'roadmap.csv').expect(400);
+  assert.match(failed.body.error, /row 3.*Milestone dates/);
+  assert.equal(await Roadmap.countDocuments(), count);
+  await clients.Admin.post('/api/roadmap/import').field('department', 'Engineering').attach('file', Buffer.from('Title\nMissing dates'), 'roadmap.csv').expect(400);
+});
+
+test('any workspace member can freeze and resume while other edits remain protected', async () => {
+  const task = await createTask({ creator: users[2]._id, title: 'Freeze production', status: 'in_progress' });
+  const path = `/api/tasks/${id(task)}`;
+  await request(app).patch(path).send({ frozen: true, __v: task.__v }).expect(401);
+  for (const extra of [{ title: 'Unauthorized edit' }, { status: 'done' }, { owner: id(users[3]) }, { department: 'Sales' }]) {
+    await clients.Bob.patch(path).send({ frozen: true, __v: task.__v, ...extra }).expect(403);
+  }
+  await clients['Foreign admin'].patch(path).send({ frozen: true, __v: task.__v }).expect(404);
+  await clients.Alice.patch(path).send({ frozen: 'yes', __v: task.__v }).expect(400);
+  await clients.Bob.patch(path).send({ frozen: 'yes', __v: task.__v }).expect(400);
+  const frozen = await clients.Bob.patch(path).send({ frozen: true, __v: task.__v }).expect(200);
+  assert.equal(frozen.body.frozen, true);
+  assert.equal(frozen.body.status, 'in_progress');
+  assert.equal((await clients.Alice.get(path).expect(200)).body.frozen, true);
+  await clients.Alice.patch(path).send({ frozen: false, __v: task.__v }).expect(409);
+  const resumed = await clients.Bob.patch(path).send({ frozen: false, __v: frozen.body.__v }).expect(200);
+  assert.equal(resumed.body.frozen, false);
+  assert.equal(resumed.body.status, 'in_progress');
+});
+
+test('legacy tasks without a frozen field and newly created tasks can freeze and resume', async () => {
+  const legacy = await createTask({ title: 'Legacy freeze coverage', creator: users[2]._id });
+  await Task.collection.updateOne({ _id: legacy._id }, { $unset: { frozen: '' } });
+  const created = await clients.Alice.post('/api/tasks').send({ title: 'New freeze coverage', department: 'Engineering' }).expect(201);
+  for (const taskId of [id(legacy), created.body._id]) {
+    const path = `/api/tasks/${taskId}`;
+    const before = await clients.Alice.get(path).expect(200);
+    const frozen = await clients.Alice.patch(path).send({ frozen: true, __v: before.body.__v }).expect(200);
+    assert.equal((await clients.Alice.get(path)).body.frozen, true);
+    const resumed = await clients.Bob.patch(path).send({ frozen: false, __v: frozen.body.__v }).expect(200);
+    assert.equal(resumed.body.frozen, false);
+  }
+});

@@ -1,0 +1,24 @@
+.task-crystal { position: absolute; inset: 0; overflow: hidden; border-radius: inherit; pointer-events: none; }
+.task-crystal svg { display: block; width: 100%; height: 100%; filter: drop-shadow(0 0 .6px #c5a7ff); }
+.task-crystal-facet { transform-box: view-box; animation: task-crystallize 1s cubic-bezier(.2,.65,.3,1) var(--delay) both; }
+.task-crystal-glint { position: absolute; left: 30%; top: 16%; color: #fff; font-size: 28px; text-shadow: 0 0 18px #cfbaff; animation: task-crystal-glint 4s ease-in-out infinite; }
+.task-crystal-glint-secondary { left: auto; right: 12%; top: auto; bottom: 16%; font-size: 18px; animation-delay: -2s; }
+.task-crystal-impact { position: absolute; left: 50%; top: 50%; width: 20px; height: 20px; border: 1px solid #eee2ff; border-radius: 50%; animation: task-crystal-impact .7s ease-out both; }
+.app-theme .taskFrozen .taskFace { border: 2px solid #bba6ef; box-shadow: inset 0 0 24px #a58bed25, 0 0 22px #a58bed40; }
+@keyframes task-crystallize {
+  from { transform: translate(var(--dx), var(--dy)) rotate(var(--turn)) scale(.35); opacity: 0; }
+  to { transform: translate(0, 0) rotate(0deg) scale(1); opacity: 1; }
+}
+@keyframes task-crystal-glint { 0%, 100% { opacity: .3; transform: scale(.6); } 50% { opacity: 1; transform: scale(1); } }
+@keyframes task-crystal-impact { from { opacity: .9; transform: translate(-50%, -50%) scale(.4); } to { opacity: 0; transform: translate(-50%, -50%) scale(12); } }
+@media (prefers-reduced-motion: reduce) {
+  .task-crystal-facet, .task-crystal-glint { animation: none; }
+  .task-crystal-glint { opacity: .6; }
+  .task-crystal-impact { display: none; }
+}
+.task-freeze-surface { position: relative; isolation: isolate; padding: 14px; border: 1px solid var(--line); border-radius: 12px; }
+.task-freeze-surface.is-frozen { border-color: #bba6ef; box-shadow: inset 0 0 24px #a58bed25, 0 0 22px #a58bed40; }
+.task-freeze-surface .taskFrozenBadge { position: relative; display: inline-block; margin-top: 8px; }
+.task-freeze-surface .error { position: relative; z-index: 1; }
+.focus-list .task-freeze-surface { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.focus-list .task-freeze-surface > button { width: auto; margin-left: auto; }

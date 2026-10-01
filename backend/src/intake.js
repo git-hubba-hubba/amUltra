@@ -3,27 +3,22 @@ import multer from 'multer';
 import ExcelJS from 'exceljs';
 import { parse } from 'csv-parse/sync';
 import mongoose from 'mongoose';
-import { Batch, Proposal, Task, Meeting, Project, User } from './models.js';
-import { requireValue, isAdmin, canEdit } from './policy.js';
+import { Batch, Proposal, Task, Meeting, Project, User, Roadmap } from './models.js';
+import { requireValue, isAdmin, canEdit, validateDates } from './policy.js';
 import { scope, getItem, validateUser, audit } from './resources.js';
 import { detectColumns, nonemptyRow, normalizeRow } from './import-parser.js';
 export { normalizeRow } from './import-parser.js';
 export const intake=Router();
 export const upload=multer({storage:multer.memoryStorage(),limits:{fileSize:10*1024*1024,files:1}});
 const cellText=value=>value && typeof value==='object' ? value.text || (value.richText ? value.richText.map(x=>x.text).join('') : value.result ?? '') : value;
-intake.post('/imports', upload.single('file'), async (req, res) => {
- requireValue(req.file, 'Select an XLSX or CSV file');
- const project = req.body.project ? await getItem(req, Project, req.body.project) : null;
- const department = project?.department || req.body.department || req.user.department;
- const canAssign = isAdmin(req.user, department, project?._id);
- requireValue(department !== '*' && (canAssign || req.user.department === department), 'Department required', 403);
- const filename = req.file.originalname;
+async function readSheets(file) {
+ const filename = file.originalname;
  const sheets = {};
  if (/\.csv$/i.test(filename)) {
-  sheets.Sheet1 = parse(req.file.buffer.toString('utf8'), { bom: true, relax_column_count: true });
+  sheets.Sheet1 = parse(file.buffer.toString('utf8'), { bom: true, relax_column_count: true });
  } else if (/\.xlsx$/i.test(filename)) {
   const book = new ExcelJS.Workbook();
-  await book.xlsx.load(req.file.buffer);
+  await book.xlsx.load(file.buffer);
   requireValue(book.worksheets.reduce((sum, sheet) => sum + sheet.rowCount, 0) <= 5000, 'Upload must contain at most 5000 rows');
   for (const sheet of book.worksheets) {
    sheets[sheet.name] = Array.from({ length: sheet.rowCount }, (_, index) => Array.from(sheet.getRow(index + 1).values.slice(1), value => value instanceof Date ? value.toISOString() : cellText(value)));
@@ -31,6 +26,16 @@ intake.post('/imports', upload.single('file'), async (req, res) => {
  } else requireValue(false, 'Only XLSX and CSV are supported');
  const rowCount = Object.values(sheets).reduce((total, rows) => total + rows.length, 0);
  requireValue(rowCount > 0 && rowCount <= 5000, 'Upload must contain 1–5000 rows');
+ return sheets;
+}
+intake.post('/imports', upload.single('file'), async (req, res) => {
+ requireValue(req.file, 'Select an XLSX or CSV file');
+ const project = req.body.project ? await getItem(req, Project, req.body.project) : null;
+ const department = project?.department || req.body.department || req.user.department;
+ const canAssign = isAdmin(req.user, department, project?._id);
+ requireValue(department !== '*' && (canAssign || req.user.department === department), 'Department required', 403);
+ const filename = req.file.originalname;
+ const sheets = await readSheets(req.file);
  const members = await User.find({ organization: req.user.organization, status: { $in: ['active', 'pending'] } }).select('name email');
  const mapping = {}, drafts = [];
  for (const [sheet, rows] of Object.entries(sheets)) {
@@ -58,6 +63,49 @@ intake.post('/imports', upload.single('file'), async (req, res) => {
  });
  const items = await Proposal.find({ batch: batchId, organization: req.user.organization }).sort({ row: 1 });
  res.status(201).json({ _id: batchId, filename, items, generated: items.filter(item => item.status === 'approved').length, needsReview: items.filter(item => item.status === 'pending').length });
+});
+intake.post('/roadmap/import', upload.single('file'), async (req, res) => {
+ requireValue(req.file, 'Select an XLSX or CSV file');
+ const project = req.body.project ? await getItem(req, Project, req.body.project) : null;
+ const department = project?.department || req.body.department || req.user.department;
+ requireValue(isAdmin(req.user, department, project?._id), 'Project or department admin required', 403);
+ requireValue(department && department !== '*', 'Department required');
+ const sheets = await readSheets(req.file);
+ const items = [];
+ const aliases = {
+  title: ['title', 'workstream', 'milestone', 'workstream milestone', 'task'],
+  startDate: ['start', 'start date', 'startdate'],
+  dueDate: ['target', 'target date', 'due', 'due date', 'duedate', 'end date', 'deadline'],
+  phase: ['phase'], kind: ['kind', 'type'], status: ['status'], description: ['description', 'notes'],
+  ownerLabel: ['owner', 'assignee'],
+ };
+ for (const [sheet, rows] of Object.entries(sheets)) {
+  if (!rows.some(nonemptyRow)) continue;
+  const header = rows.findIndex(nonemptyRow);
+  const headings = rows[header].map(value => String(value ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim());
+  const mapping = Object.fromEntries(Object.entries(aliases).map(([field, names]) => [field, headings.findIndex(value => names.includes(value))]));
+  requireValue(['title', 'startDate', 'dueDate'].every(field => mapping[field] >= 0), `${sheet}: include Title, Start and Target column headings`);
+  rows.forEach((row, index) => {
+   if (index <= header || !nonemptyRow(row)) return;
+   const value = field => String(row[mapping[field]] ?? '').trim();
+   const item = { ...scope(req), creator: req.user._id, department, project: project?._id,
+    title: value('title'), description: value('description'), startDate: value('startDate'), dueDate: value('dueDate'),
+    phase: value('phase') || 'EP 1.0', kind: value('kind').toLowerCase() || 'workstream', status: value('status') || 'Planned',
+    sourceReference: { file: req.file.originalname, row: index + 1, ownerLabel: value('ownerLabel') },
+   };
+   try {
+    requireValue(item.title, 'Title required');
+    requireValue(['Planned', 'In Progress', 'Complete'].includes(item.status), 'Status must be Planned, In Progress or Complete');
+    validateDates(item, 'roadmap');
+    const error = new Roadmap(item).validateSync();
+    requireValue(!error, error?.message);
+   } catch (error) { requireValue(false, `${sheet}, row ${index + 1}: ${error.message}`); }
+   items.push(item);
+  });
+ }
+ requireValue(items.length, 'No roadmap rows found');
+ await mongoose.connection.transaction(async session => { await Roadmap.insertMany(items, { session }); });
+ res.status(201).json({ filename: req.file.originalname, generated: items.length });
 });
 // An actionable, persistent notification derived from pending proposals. New admins
 // see outstanding work immediately; revoked project grants stop receiving it.

@@ -2,6 +2,7 @@ import { api } from '../lib/api';
 import { useState } from 'react';
 import { useResource } from '../lib/useResource';
 import Tasks from './Tasks';
+import TaskFreezeSurface from './TaskFreezeSurface';
 import Cinemas from './Cinemas';
 import ProjectAccess from '../features/workspace/ProjectAccess';
 import { RecordDetail } from '../features/workspace/Records';
@@ -27,10 +28,10 @@ export default function Profile({ user, q, members, projects, onAccessChanged, l
     {tab === 'Tasks' && <>
       <section className="panel"><h2>Shared with you</h2><Feedback loading={notifications?.loading} error={notifications?.error} />
         {notifications?.data?.items.length === 0 && <p>No task notifications yet.</p>}
-        {notifications?.data?.items.map(notification => <article className="note" key={notification._id}><strong>{notification.sender?.name || 'Member'}</strong> shared {notification.title}{!notification.readAt && <small> · New</small>} <button onClick={async () => {
+        {notifications?.data?.items.map(notification => <TaskFreezeSurface key={notification._id} id={notification.task}><strong>{notification.sender?.name || 'Member'}</strong> shared {notification.title}{!notification.readAt && <small> · New</small>} <button onClick={async () => {
           setSelected(notification.task); setMode('');
           try { await api(`/notifications/${notification._id}/read`, { method: 'PATCH' }); notifications.refresh(); } catch (error) { setError(error.message); }
-        }}>View task</button></article>)}
+        }}>View task</button></TaskFreezeSurface>)}
       </section>
 <p className="muted">Your priority queue: overdue tasks, priority, deadline, then difficulty.</p><Feedback loading={queue.loading} error={queue.error} empty={!tasks.length} />{tasks.map(record => <Tasks key={record._id} record={record} user={user} open={open} refresh={queue.refresh} />)}</>}
     {tab === 'Cinemas' && <Cinemas user={user} members={members} projects={projects} q={q} />}
