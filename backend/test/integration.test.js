@@ -342,6 +342,8 @@ test('project grants cover intake, transcript proposals and Cinema without expan
   const batch = await clients.Alice.post('/api/imports').field('project', id(project)).attach('file', Buffer.from(csv), 'project.csv').expect(201);
   const proposal = await Proposal.findOne({ batch: batch.body._id });
   assert.equal(id(proposal.project), id(project));
+  assert.ok((await clients.Alice.get(`/api/proposals?batch=${batch.body._id}`).expect(200)).body.some(item => item._id === id(proposal)));
+  assert.deepEqual((await clients.Bob.get(`/api/proposals?batch=${batch.body._id}`).expect(200)).body, []);
   const approved = await clients.Alice.post(`/api/proposals/${proposal._id}/review`).send({ decision: 'approved', __v: proposal.__v, acknowledge: true, draft: { title: proposal.draft.title, description: 'Reviewed import', priority: 'High', difficulty: 3 } }).expect(200);
   const task = await Task.findById(approved.body.task);
   assert.equal(id(task.project), id(project));
@@ -518,12 +520,22 @@ test('notes generate separate pending dashboard drafts; only an authorized manag
  const response = await clients.Alice.post('/api/notes/import').field('department', 'Engineering')
   .attach('file', Buffer.from('# Meeting notes\n- Follow up with the customer\n2. Prepare the sales report\n'), 'notes.md').expect(201);
  assert.equal(response.body.needsReview, 2);
- const proposals = response.body.items;
+ assert.deepEqual(response.body.items, []);
+ const proposals = (await clients['Department admin'].get(`/api/proposals?batch=${response.body._id}`).expect(200)).body;
  assert.deepEqual(proposals.map(item => item.draft.title), ['Follow up with the customer', 'Prepare the sales report']);
  assert.ok(proposals.every(item => item.status === 'pending' && item.original.kind === 'notes'));
  assert.equal(await Task.countDocuments({ sourceProposal: { $in: proposals.map(item => item._id) } }), 0);
  const listed = await clients.Alice.get('/api/proposals?status=pending&source=notes').expect(200);
- assert.ok(listed.body.some(item => item._id === proposals[0]._id));
+ assert.deepEqual(listed.body, []);
+ for(const path of ['/api/proposals', `/api/proposals?batch=${response.body._id}`, '/api/proposals?status=denied']) {
+  const hidden = await clients.Bob.get(path).expect(200);
+  assert.ok(hidden.body.every(item => item.status === 'approved'));
+ }
+ assert.equal((await clients.Alice.get(`/api/proposals?batch=${response.body._id}`).expect(200)).body.length, 0);
+ const outsideDepartment = await Proposal.create({ organization:'amethyst', department:'Sales', creator:users[0]._id, source:'private-note', draft:{title:'Private sales draft',priority:'Medium',difficulty:3} });
+ const departmentDrafts = await clients['Department admin'].get('/api/proposals?status=pending').expect(200);
+ assert.ok(!departmentDrafts.body.some(item => item._id === id(outsideDepartment)));
+ assert.ok((await clients.Admin.get('/api/proposals?status=pending').expect(200)).body.some(item => item._id === id(outsideDepartment)));
  const foreign = await clients['Foreign admin'].get('/api/proposals?status=pending&source=notes').expect(200);
  assert.ok(!foreign.body.some(item => item._id === proposals[0]._id));
  await clients.Alice.post(`/api/proposals/${proposals[0]._id}/review`).send({ decision: 'approved' }).expect(403);
@@ -531,10 +543,15 @@ test('notes generate separate pending dashboard drafts; only an authorized manag
  await clients['Department admin'].post(`/api/proposals/${proposals[0]._id}/review`).send({ decision: 'approved', __v: proposals[0].__v, acknowledge: true, draft: proposals[0].draft }).expect(200);
  await clients.Admin.post(`/api/proposals/${proposals[0]._id}/review`).send({ decision: 'approved' }).expect(200);
  assert.equal(await Task.countDocuments({ sourceProposal: proposals[0]._id }), 1);
+ const published = await Task.findOne({sourceProposal:proposals[0]._id});
+ await clients.Bob.get(`/api/tasks/${published._id}`).expect(200);
+ const visibleAfterApproval = await clients.Alice.get(`/api/proposals?batch=${response.body._id}`).expect(200);
+ assert.deepEqual(visibleAfterApproval.body.map(item => item._id), [proposals[0]._id]);
  const remaining = await clients.Alice.get('/api/proposals?status=pending&source=notes').expect(200);
  assert.ok(!remaining.body.some(item => item._id === proposals[0]._id));
  await clients.Admin.post(`/api/proposals/${proposals[1]._id}/review`).send({ decision: 'denied' }).expect(200);
  assert.equal(await Task.countDocuments({ sourceProposal: proposals[1]._id }), 0);
+ assert.deepEqual((await clients.Bob.get('/api/proposals?status=denied').expect(200)).body, []);
 });
 
 test('notes upload accepts pasted text and validates empty, unsupported, excessive and unauthorized input', async () => {

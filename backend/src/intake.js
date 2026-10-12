@@ -9,6 +9,15 @@ import { scope, getItem, validateUser, audit } from './resources.js';
 import { detectColumns, nonemptyRow, normalizeRow } from './import-parser.js';
 export { normalizeRow } from './import-parser.js';
 export const intake=Router();
+// Unpublished proposals are visible only to administrators who can review them.
+const visibleProposal = (user, item) => item.status === 'approved' || isAdmin(user, item.department, item.project);
+function proposalVisibility(user) {
+ if(user.role === 'admin' && user.department === '*') return {};
+ const alternatives = [{status:'approved'}];
+ if(user.role === 'admin') alternatives.push({department:user.department});
+ if(user.projectAdminIds?.length) alternatives.push({project:{$in:user.projectAdminIds}});
+ return {$or:alternatives};
+}
 export const upload=multer({storage:multer.memoryStorage(),limits:{fileSize:10*1024*1024,files:1}});
 const cellText=value=>value && typeof value==='object' ? value.text || (value.richText ? value.richText.map(x=>x.text).join('') : value.result ?? '') : value;
 async function readSheets(file) {
@@ -49,7 +58,7 @@ intake.post('/notes/import', upload.single('file'), async (req, res) => {
   })), { session });
  });
  await audit(req, 'notes', batch._id, 'import', { count: items.length });
- res.status(201).json({ _id: batch._id, filename, items, generated: 0, needsReview: items.length });
+ res.status(201).json({ _id: batch._id, filename, items: items.filter(item => visibleProposal(req.user,item)), generated: 0, needsReview: items.length });
 });
 intake.post('/imports', upload.single('file'), async (req, res) => {
  requireValue(req.file, 'Select an XLSX or CSV file');
@@ -85,7 +94,7 @@ intake.post('/imports', upload.single('file'), async (req, res) => {
   }
  });
  const items = await Proposal.find({ batch: batchId, organization: req.user.organization }).sort({ row: 1 });
- res.status(201).json({ _id: batchId, filename, items, generated: items.filter(item => item.status === 'approved').length, needsReview: items.filter(item => item.status === 'pending').length });
+ res.status(201).json({ _id: batchId, filename, items: items.filter(item => visibleProposal(req.user,item)), generated: items.filter(item => item.status === 'approved').length, needsReview: items.filter(item => item.status === 'pending').length });
 });
 intake.post('/roadmap/import', upload.single('file'), async (req, res) => {
  requireValue(req.file, 'Select an XLSX or CSV file');
@@ -138,7 +147,7 @@ intake.get('/intake-alerts', async (req, res) => {
  res.json({ count: actionable.length, flagged: actionable.filter(item => item.warnings.length).length });
 });
 intake.get('/proposals', async (req, res) => {
- const filter = { ...scope(req) };
+ const filter = { ...scope(req), ...proposalVisibility(req.user) };
  if (req.query.status) filter.status = String(req.query.status);
  if (req.query.source === 'notes') filter['original.kind'] = 'notes';
  if (req.query.batch) { requireValue(mongoose.isValidObjectId(req.query.batch), 'Invalid upload ID'); filter.batch = req.query.batch; }

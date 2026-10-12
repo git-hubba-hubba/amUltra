@@ -7,6 +7,7 @@ import { admin, date, priorities } from '../features/workspace/helpers';
 
 export function GeneratedTask({ item, user, members, refresh }) {
   const [busy, setBusy] = useState(false), [error, setError] = useState('');
+  if (item.status !== 'approved' && !admin(user, item)) return null;
   async function review(decision, form) {
     setBusy(true); setError('');
     try {

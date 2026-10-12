@@ -3,7 +3,7 @@ import Tasks from '../components/Tasks';
 import { GeneratedTask } from '../components/FileUploader';
 import { useResource } from '../lib/useResource';
 import { RecordDetail } from '../features/workspace/Records';
-import { fieldsFor } from '../features/workspace/helpers';
+import { admin, fieldsFor } from '../features/workspace/helpers';
 import Modal from '../features/shared/Modal';
 import RecordForm from '../features/shared/RecordForm';
 import Feedback from '../features/shared/Feedback';
@@ -23,7 +23,7 @@ export default function TaskHolder({ user, q, members, projects }) {
   const params = new URLSearchParams({ q, department, priority, completion: 'all', page: '1', limit: '200', sort: 'priority' });
   if (due) params.set('to', new Date(`${due}T23:59:59`).toISOString());
   const tasks = useResource(`/tasks?${params}`, true);
-  const pendingTasks = (proposals.data || []).map(item => ({ ...item.draft, _id: item._id, __v: item.__v, department: item.department, creator: item.creator, project: item.project, createdAt: item.createdAt, status: 'pending_approval', approvalPending: true }));
+  const pendingTasks = (proposals.data || []).filter(item => admin(user,item)).map(item => ({ ...item.draft, _id: item._id, __v: item.__v, department: item.department, creator: item.creator, project: item.project, createdAt: item.createdAt, status: 'pending_approval', approvalPending: true }));
   const matchingDrafts = pendingTasks.filter(item => (!department || item.department.toLowerCase().includes(department.toLowerCase())) && (!priority || item.priority === priority) && !due && `${item.title} ${item.description}`.toLowerCase().includes((q || '').toLowerCase()));
   const filteredTasks = [...matchingDrafts, ...(tasks.data?.items || [])]
     .filter(task => completion === '' || (completion === 'completed' ? task.status === 'done' : task.status !== 'done'))
