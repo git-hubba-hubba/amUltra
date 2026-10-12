@@ -36,6 +36,7 @@ export async function authenticate(req, res, next) {
   const user = session && await User.findById(session.user);
   requireValue(user && user.loginEnabled !== false && ['pending', 'active'].includes(user.status), 'Please log in', 401);
   req.user = await loadAccess(user);
+  req.session = session;
   next();
  } catch (error) { next(error); }
 }

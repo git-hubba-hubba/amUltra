@@ -513,3 +513,35 @@ test('legacy tasks without a frozen field and newly created tasks can freeze and
     assert.equal(resumed.body.frozen, false);
   }
 });
+
+test('notes generate separate pending dashboard drafts; only an authorized manager can activate them', async () => {
+ const response = await clients.Alice.post('/api/notes/import').field('department', 'Engineering')
+  .attach('file', Buffer.from('# Meeting notes\n- Follow up with the customer\n2. Prepare the sales report\n'), 'notes.md').expect(201);
+ assert.equal(response.body.needsReview, 2);
+ const proposals = response.body.items;
+ assert.deepEqual(proposals.map(item => item.draft.title), ['Follow up with the customer', 'Prepare the sales report']);
+ assert.ok(proposals.every(item => item.status === 'pending' && item.original.kind === 'notes'));
+ assert.equal(await Task.countDocuments({ sourceProposal: { $in: proposals.map(item => item._id) } }), 0);
+ const listed = await clients.Alice.get('/api/proposals?status=pending&source=notes').expect(200);
+ assert.ok(listed.body.some(item => item._id === proposals[0]._id));
+ const foreign = await clients['Foreign admin'].get('/api/proposals?status=pending&source=notes').expect(200);
+ assert.ok(!foreign.body.some(item => item._id === proposals[0]._id));
+ await clients.Alice.post(`/api/proposals/${proposals[0]._id}/review`).send({ decision: 'approved' }).expect(403);
+ await clients.Admin.post(`/api/proposals/${proposals[0]._id}/review`).send({ decision: 'approved' }).expect(400);
+ await clients['Department admin'].post(`/api/proposals/${proposals[0]._id}/review`).send({ decision: 'approved', __v: proposals[0].__v, acknowledge: true, draft: proposals[0].draft }).expect(200);
+ await clients.Admin.post(`/api/proposals/${proposals[0]._id}/review`).send({ decision: 'approved' }).expect(200);
+ assert.equal(await Task.countDocuments({ sourceProposal: proposals[0]._id }), 1);
+ const remaining = await clients.Alice.get('/api/proposals?status=pending&source=notes').expect(200);
+ assert.ok(!remaining.body.some(item => item._id === proposals[0]._id));
+ await clients.Admin.post(`/api/proposals/${proposals[1]._id}/review`).send({ decision: 'denied' }).expect(200);
+ assert.equal(await Task.countDocuments({ sourceProposal: proposals[1]._id }), 0);
+});
+
+test('notes upload accepts pasted text and validates empty, unsupported, excessive and unauthorized input', async () => {
+ await clients.Alice.post('/api/notes/import').send({ department: 'Engineering', notes: 'Review the customer request\n- Update the report' }).expect(201);
+ await clients.Alice.post('/api/notes/import').send({ department: 'Sales', notes: 'Update report' }).expect(403);
+ await clients.Alice.post('/api/notes/import').send({ department: 'Engineering', notes: '# Heading\n\n' }).expect(400);
+ await clients.Alice.post('/api/notes/import').send({ department: 'Engineering', notes: Array(101).fill('Task').join('\n') }).expect(400);
+ await clients.Alice.post('/api/notes/import').field('department', 'Engineering').attach('file', Buffer.from('Task'), 'notes.exe').expect(400);
+ await clients.Alice.post('/api/notes/import').field('department', 'Engineering').field('notes', 'Other task').attach('file', Buffer.from('Task'), 'notes.txt').expect(400);
+});

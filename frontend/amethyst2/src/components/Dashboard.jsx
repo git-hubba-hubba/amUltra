@@ -12,6 +12,7 @@ import Profile from './Profile';
 import TaskHolder from '../pages/TaskHolder';
 import FileUploader from './FileUploader';
 import Cinemas from './Cinemas';
+import Jade from '../pages/Jade';
 import { useResource } from '../lib/useResource';
 
 export default function Dashboard({ user: initialUser, logout }) {
@@ -53,11 +54,11 @@ export default function Dashboard({ user: initialUser, logout }) {
   const pages = {
     overview: Overview, meetings: Meetings, projects: Projects, concept: ConceptHub,
     roadmap: Roadmap, tasks: TaskHolder, calendar: Calendar, profile: Profile,
-    fileUploader: FileUploader, cinemas: Cinemas, members: MembersDashboard,
+    fileUploader: FileUploader, cinemas: Cinemas, members: MembersDashboard, jade: Jade,
   };
   const Page = pages[currentDisplay] || TaskHolder;
   return (
-    <div className="dashboard">
+    <div className="dashboard" data-ecosystem={currentDisplay === 'jade' ? 'jade' : 'amethyst'}>
       <Nav currentDisplay={currentDisplay} setCurrentDisplay={setCurrentDisplay} search={search} setSearch={setSearch} reviewCount={alerts.data?.count || 0} notificationCount={notifications.data?.unread || 0} />
       <div className="ghadbhadi">
         <aside className="gbLeft">
@@ -67,7 +68,7 @@ export default function Dashboard({ user: initialUser, logout }) {
           {session.error && <p className="error" role="alert">Access: {session.error}</p>}
           {members.error && <p className="error" role="alert">Members: {members.error}</p>}
           {projects.error && <p className="error" role="alert">Projects: {projects.error}</p>}
-          <Page key={`${currentDisplay}:${search}`} {...context} />
+          <Page key={currentDisplay === 'jade' ? 'jade' : `${currentDisplay}:${search}`} {...context} />
         </main>
         <div className="gbRight" />
       </div>

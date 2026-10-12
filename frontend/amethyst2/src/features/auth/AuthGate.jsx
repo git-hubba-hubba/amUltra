@@ -68,7 +68,7 @@ export default function AuthGate({ children }) {
           <label>Department<input name="department" required defaultValue="General" /></label>
         </>}
         <label>Email<input name="email" type="email" required autoComplete="email" /></label>
-        <label>Password<input name="password" type="password" minLength={12} required autoComplete={signup ? 'new-password' : 'current-password'} /></label>
+        <label>Password<input name="password" type="password" minLength={signup ? 12 : undefined} required autoComplete={signup ? 'new-password' : 'current-password'} /></label>
         <button className="sign-in-button" disabled={busy}>
           {busy ? 'Please wait…' : signup ? 'Create account' : 'Log in'}
           <span aria-hidden="true">↗</span>

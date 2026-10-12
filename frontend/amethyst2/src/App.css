@@ -2,8 +2,8 @@
 .dashboard {
   min-height: 100vh;
   background: #000;
-  color: lightslategray;
-  font-family: Georgia, 'Times New Roman', serif;
+  color: white;
+  font-family: Arial, Helvetica, serif;
   color-scheme: dark;
 }
 
@@ -19,8 +19,8 @@
 .navNput::placeholder { color: gray; opacity: 1; }
 .currentDisplay { color: lime; font-size: 32px; margin: 0; }
 .ghadbhadi { display: flex; align-items: stretch; }
-.gbLeft { width: 20%; flex-shrink: 0; padding: 38px 30px; }
-.gbMid { width: 80%; min-width: 0; min-height: calc(100vh - 88px); border: 6px solid blue; padding: 32px; }
+.gbLeft { width: auto; flex: 0 0 auto; padding: 38px 30px; }
+.gbMid { flex: 1; min-width: 0; min-height: calc(100vh - 88px); border: 6px solid blue; padding: 32px; }
 .gbRight { width: 0; }
 .stMain { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; min-height: 90px; margin: 0 0 43px; padding: 0; background: black; border: 0; color: lightslategray; text-align: left; }
 .stContent { font-size: 32px; }
@@ -175,8 +175,8 @@
   .leftNav { gap: 5px; width: 32%; }
   .navNput { width: 36%; font-size: 18px !important; height: 35px; }
   .currentDisplay { font-size: 16px; }
-  .gbLeft { width: 23%; padding: 22px 8px; }
-  .gbMid { width: 77%; border-width: 3px; padding: 14px; }
+  .gbLeft { padding: 22px 8px; }
+  .gbMid { border-width: 3px; padding: 14px; }
   .stMain { flex-direction: column; justify-content: start; gap: 12px; margin-bottom: 30px; }
   .stContent, .dashboard .stMain { font-size: 14px; }
   .stImg { width: 32px; height: 32px; }
@@ -184,7 +184,7 @@
   .taskSlice { width: 100%; font-size: 20px; }
   .taskFront { gap: 20px; padding: 18px; }
   .taskHolder { gap: 12px; }
-  .taskTitle { font-size: 20px; }
+  .taskTitle { font-size: 16px; }
   .taskDesc { font-size: 14px; }
   .taskBack { padding: 18px; }
   .taskBack .record-form { display: grid; }
@@ -242,3 +242,7 @@
 body{
   font-family: serif;
 }
+
+/* Notes-generated drafts remain visible until manager approval. */
+.taskMajor.taskPendingApproval { opacity: .72; }
+.taskMajor.taskPendingApproval:focus-within { outline: 2px solid var(--accent); outline-offset: 3px; }

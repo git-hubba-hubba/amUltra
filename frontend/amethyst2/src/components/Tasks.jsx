@@ -72,6 +72,9 @@ export default function Tasks({ record: initialRecord, user, open, refresh }) {
     }
     if (clicks.current.click()) toggleFrozen();
   }
+  if (record.approvalPending) return <article className="taskMajor taskPendingApproval" data-task-id={record._id}><div className="taskFace taskFront">
+    <div className="taskHolder"><div className="taskBadge"><span>{record.department}</span><span>Awaiting manager approval</span></div><p className="taskTitle">{record.title}</p><hr /><p className="taskDesc">{record.description}</p><button onClick={() => open(record)}>Review draft</button></div><div className="taskManager"><small>Pending approval · not yet available for execution</small></div></div>
+  </article>;
   return (
     <>
     <article onClick={tripleClick} data-task-id={record._id} title="Triple-click the card to freeze or resume production" className={`taskMajor ${flipped ? 'flipped' : ''} ${record.status === 'done' ? 'taskCompleted' : ''} ${record.frozen ? 'taskFrozen' : ''}`}>
@@ -80,7 +83,7 @@ export default function Tasks({ record: initialRecord, user, open, refresh }) {
         <div className="taskFace taskFront" inert={flipped}>
           <div className="taskHolder">
             <div className="taskBadge"><span>{record.department}{record.status === 'done' && ' · Completed'}</span><span>{record.priority} · Difficulty {record.difficulty}/5</span></div>
-            <h2 className="taskTitle">{record.title}</h2>
+            <p className="taskTitle">{record.title}</p>
             <hr />
             <p className="taskDesc">{record.description || 'Open this task to add details.'}</p>
             <button className="taskFlipButton" onClick={() => setFlipped(true)}>Action items ({record.actionItems?.length || 0}) ↻</button>

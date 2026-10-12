@@ -14,11 +14,12 @@ const projectAccessSchema = new Schema({
 }, options);
 projectAccessSchema.index({ organization: 1, project: 1, user: 1 }, { unique: true });
 export const ProjectAccess = mongoose.model('ProjectAccess', projectAccessSchema);
-export const Session = mongoose.model('Session', new Schema({ tokenHash: { type: String, unique: true }, user: ref('User', true), expiresAt: { type: Date, expires: 0 } }));
+export const Session = mongoose.model('Session', new Schema({ tokenHash: { type: String, unique: true }, user: ref('User', true), expiresAt: { type: Date, expires: 0 }, jadeUnlockedUntil: Date }));
 const comment = new Schema({ author: ref('User', true), body: { type: String, required: true, maxlength: 10000 }, parent: Schema.Types.ObjectId }, { timestamps: true });
 const action = new Schema({ title: { type: String, required: true, maxlength: 500 }, done: { type: Boolean, default: false }, creator: ref('User', true) }, { timestamps: true });
 const work = { ...base, title: { type: String, required: true, maxlength: 500 }, description: { type: String, default: '', maxlength: 30000 }, department: { type: String, required: true }, team: { type: String, default: '' }, creator: ref('User', true), owner: ref('User'), priority: { type: String, enum: ['Critical', 'High', 'Medium', 'Low'], default: 'Medium' }, status: { type: String, default: 'todo' }, startDate: Date, dueDate: Date, comments: { type: [comment], default: [] } };
 const taskSchema = new Schema({ ...work, frozen: { type: Boolean, default: false }, status: { type: String, enum: ['todo', 'in_progress', 'blocked', 'in_review', 'done', 'cancelled'], default: 'todo' }, project: ref('Project'), difficulty: { type: Number, min: 1, max: 5, default: 3, validate: Number.isInteger }, actionItems: { type: [action], default: [] }, blockedReason: String, completedAt: Date, dependencies: [ref('Task')], assignmentHistory: [{ actor: ref('User'), previous: ref('User'), next: ref('User'), at: Date }], sourceProposal: { type: Schema.Types.ObjectId, unique: true, sparse: true } }, options);
+taskSchema.add({ jadeSource: { type: String, unique: true, sparse: true } });
 taskSchema.index({ organization: 1, owner: 1, archived: 1, dueDate: 1 });
 taskSchema.index({ organization: 1, department: 1, archived: 1, createdAt: -1 });
 export const Task = mongoose.model('Task', taskSchema);

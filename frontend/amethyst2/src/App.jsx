@@ -4,6 +4,7 @@ import AuthGate from './features/auth/AuthGate';
 import Dashboard from './components/Dashboard';
 import './App.css';
 import './theme.css';
+import './ecosystem.css';
 
 export default function App() {
   const [entered, setEntered] = useState(false);

@@ -28,6 +28,29 @@ async function readSheets(file) {
  requireValue(rowCount > 0 && rowCount <= 5000, 'Upload must contain 1–5000 rows');
  return sheets;
 }
+intake.post('/notes/import', upload.single('file'), async (req, res) => {
+ const project = req.body.project ? await getItem(req, Project, req.body.project) : null;
+ const department = project?.department || req.body.department || req.user.department;
+ requireValue(typeof department === 'string' && department.trim() && department !== '*' && (isAdmin(req.user, department, project?._id) || req.user.department === department), 'Choose an authorized department', 403);
+ requireValue(!req.file || /\.(txt|md)$/i.test(req.file.originalname), 'Upload TXT or Markdown notes');
+ requireValue(!(req.file && req.body.notes?.trim()), 'Upload a file or paste notes, not both');
+ const text = req.file ? req.file.buffer.toString('utf8') : req.body.notes;
+ requireValue(typeof text === 'string' && text.trim() && text.length <= 100000 && !text.includes('\0'), 'Provide text notes up to 100,000 characters');
+ const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/).map((original, index) => ({ original, line: index + 1, title: original.trim().replace(/^(?:[-*+]\s+(?:\[[ xX]\]\s*)?|\d+[.)]\s+)/, '').trim() })).filter(item => item.title && !/^#{1,6}\s/.test(item.title));
+ requireValue(lines.length > 0 && lines.length <= 100, 'Notes must contain 1–100 task lines; headings are skipped');
+ const filename = req.file?.originalname || 'Pasted notes';
+ let batch, items;
+ await mongoose.connection.transaction(async session => {
+  [batch] = await Batch.create([{ ...scope(req), creator: req.user._id, department: department.trim(), project: project?._id, filename }], { session });
+  items = await Proposal.insertMany(lines.map(item => ({ ...scope(req), creator: req.user._id, department: department.trim(), project: project?._id, batch: batch._id, row: item.line,
+   source: `${filename} / note line ${item.line}`, original: { kind: 'notes', text: item.original, line: item.line },
+   draft: { title: item.title.slice(0, 500), description: item.title, priority: 'Medium', difficulty: 3 },
+   warnings: ['Manager must verify this note is actionable and review priority, difficulty, owner and deadline.'],
+  })), { session });
+ });
+ await audit(req, 'notes', batch._id, 'import', { count: items.length });
+ res.status(201).json({ _id: batch._id, filename, items, generated: 0, needsReview: items.length });
+});
 intake.post('/imports', upload.single('file'), async (req, res) => {
  requireValue(req.file, 'Select an XLSX or CSV file');
  const project = req.body.project ? await getItem(req, Project, req.body.project) : null;
@@ -117,6 +140,7 @@ intake.get('/intake-alerts', async (req, res) => {
 intake.get('/proposals', async (req, res) => {
  const filter = { ...scope(req) };
  if (req.query.status) filter.status = String(req.query.status);
+ if (req.query.source === 'notes') filter['original.kind'] = 'notes';
  if (req.query.batch) { requireValue(mongoose.isValidObjectId(req.query.batch), 'Invalid upload ID'); filter.batch = req.query.batch; }
  res.json(await Proposal.find(filter).sort({ createdAt: -1, row: 1 }).limit(req.query.batch ? 5000 : 500));
 });

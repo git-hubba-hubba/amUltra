@@ -10,7 +10,7 @@ export default function Nav({ currentDisplay, setCurrentDisplay, search, setSear
           <img src="https://uxwing.com/wp-content/themes/uxwing/download/file-and-folder-type/file-upload-export-dual-tone-icon.png" alt="Upload" className="navIcons" />
         </button>
       </div>
-      <input type="search" className="navNput" placeholder="Search Amethyst" aria-label="Search Amethyst" value={search} onChange={event => setSearch(event.target.value)} maxLength={200} />
+      <input type="search" className="navNput" placeholder={currentDisplay === 'jade' ? 'Search Jade' : 'Search Amethyst'} aria-label={currentDisplay === 'jade' ? 'Search Jade analyses and agents' : 'Search Amethyst'} value={search} onChange={event => setSearch(event.target.value)} maxLength={200} />
       <div className="leftNav">
         <button className="navIconButton" title="Calendar" aria-label="Calendar" onClick={() => setCurrentDisplay('calendar')}>
           <img src="https://cdn-icons-png.flaticon.com/512/1513/1513520.png" alt="Calendar" className="navIcons" />
@@ -19,7 +19,7 @@ export default function Nav({ currentDisplay, setCurrentDisplay, search, setSear
           {notificationCount > 0 && <span className="reviewNotification" role="status">{notificationCount}<span className="visuallyHidden"> unread task notifications</span></span>}
           <img src="https://cdn-icons-png.flaticon.com/512/1361/1361913.png" alt="Profile" className="navIcons" />
         </button>
-        <p className="currentDisplay" aria-live="polite">{currentDisplay}</p>
+        <p className="currentDisplay" aria-live="polite">{currentDisplay === 'jade' ? 'Jade' : currentDisplay}</p>
       </div>
     </nav>
   );

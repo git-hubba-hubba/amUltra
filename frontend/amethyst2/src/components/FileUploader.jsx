@@ -5,7 +5,7 @@ import { useResource } from '../lib/useResource';
 import Feedback from '../features/shared/Feedback';
 import { admin, date, priorities } from '../features/workspace/helpers';
 
-function GeneratedTask({ item, user, members, refresh }) {
+export function GeneratedTask({ item, user, members, refresh }) {
   const [busy, setBusy] = useState(false), [error, setError] = useState('');
   async function review(decision, form) {
     setBusy(true); setError('');
@@ -18,7 +18,7 @@ function GeneratedTask({ item, user, members, refresh }) {
     } catch (error) { setError(error.message); } finally { setBusy(false); }
   }
   return <article className="panel generated-task">
-    <div className="section-heading"><h3>{item.draft.title || `Row ${item.row || ''}: task details needed`}</h3><span className="badge">{item.status === 'approved' ? 'Task created' : item.status === 'denied' ? 'Dismissed' : 'Needs admin review'}</span></div>
+    <div className="section-heading"><h3>{item.draft.title || `Row ${item.row || ''}: task details needed`}</h3><span className="badge">{item.status === 'approved' ? 'Task created' : item.status === 'denied' ? 'Dismissed' : 'Needs manager approval'}</span></div>
     <p>{item.draft.description}</p>
     <small>{item.source} · {item.department} · {date(item.draft.dueDate)}</small>
     {item.status === 'pending' && <><ul>{item.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul>
@@ -31,14 +31,36 @@ function GeneratedTask({ item, user, members, refresh }) {
             <label>Difficulty<input name="difficulty" type="number" min="1" max="5" required defaultValue={item.draft.difficulty}/></label></div>
           <label>Owner<select name="owner" defaultValue={item.draft.owner || ''}><option value="">Unassigned</option>{members.map(member => <option key={member._id} value={member._id}>{member.name}</option>)}</select></label>
           <label className="check"><input type="checkbox" required/>I reviewed these details, including any intentionally blank fields.</label>
-          <div className="button-row"><button disabled={busy}>Approve and create task</button><button type="button" disabled={busy} onClick={() => review('denied')}>Dismiss row</button></div>
+          <div className="button-row"><button disabled={busy}>Approve and create task</button><button type="button" disabled={busy} onClick={() => review('denied')}>Dismiss draft</button></div>
         </form>
-        <details><summary>Original spreadsheet row</summary><pre>{JSON.stringify(item.original, null, 2)}</pre></details>
-      </details> : <p>The responsible admin has been notified in the app.</p>}
+        <details><summary>Original source</summary><pre>{JSON.stringify(item.original, null, 2)}</pre></details>
+      </details> : <p>Awaiting approval from an authorized department or project manager.</p>}
     </>}
     {item.task && <TaskFreezeSurface id={item.task}><strong>{item.draft.title}</strong><p>Triple-click to freeze or resume production.</p><a href={`/?task=${item.task}`}>Open task</a></TaskFreezeSurface>}
     {error && <p className="error" role="alert">{error}</p>}
   </article>;
+}
+function NotesUpload({ user, projects, onCreated }) {
+ const [busy, setBusy] = useState(false), [error, setError] = useState('');
+ const [project, setProject] = useState('');
+ async function submit(event) {
+  event.preventDefault(); const form = event.currentTarget;
+  setBusy(true); setError('');
+  try {
+   const body = new FormData(form);
+   if (!body.get('file')?.size) body.delete('file');
+   const result = await api('/notes/import', { method: 'POST', body });
+   form.reset(); setProject(''); onCreated(result);
+  } catch (failure) { setError(failure.message); } finally { setBusy(false); }
+ }
+ return <section className="panel"><h2>Notes → task drafts</h2><p>Upload TXT or Markdown notes, or paste them below. Each nonempty line or bullet becomes a separate draft; Markdown headings are skipped. Up to 100 drafts. A manager reviews task details before approval.</p>
+  <form className="record-form" onSubmit={submit}>
+   <label>Project<select name="project" value={project} onChange={event => setProject(event.target.value)}><option value="">No linked project</option>{projects.map(item => <option key={item._id} value={item._id}>{item.title}</option>)}</select></label>
+   <label>Department<input name="department" key={project} defaultValue={projects.find(item => item._id === project)?.department || (user.department === '*' ? 'General' : user.department)} required readOnly={!!project} /></label>
+   <label>Notes file<input name="file" type="file" accept=".txt,.md,text/plain,text/markdown" /></label>
+   <label>Or paste notes<textarea name="notes" maxLength={100000} placeholder={'Follow up with the customer\nPrepare the sales report'} /></label>
+   <button disabled={busy}>{busy ? 'Generating drafts…' : 'Generate task drafts'}</button><Feedback error={error} />
+  </form></section>;
 }
 export default function FileUploader({ user, members, projects, q = '', onIntakeChanged }) {
   const [batch, setBatch] = useState(null), [busy, setBusy] = useState(false), [error, setError] = useState('');
@@ -56,6 +78,7 @@ export default function FileUploader({ user, members, projects, q = '', onIntake
     } catch (error) { setError(error.message); } finally { setBusy(false); }
   }
   return <>
+    <NotesUpload user={user} projects={projects} onCreated={result => { setBatch(result); onIntakeChanged?.(); }} />
     <section className="panel"><h2>Upload → generated tasks</h2><p>Choose an Excel or CSV file. We recognize its columns and create complete tasks automatically. Missing or unclear information goes to the responsible admin.</p>
       <form className="record-form" onSubmit={upload}>
         <label>Project<select name="project" value={project} onChange={event => setProject(event.target.value)}><option value="">No linked project</option>{projects.map(item => <option key={item._id} value={item._id}>{item.title}</option>)}</select></label>

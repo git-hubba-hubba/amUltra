@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: amethyst
+    runtime: node
+    plan: starter
+    buildCommand: npm ci --prefix backend --omit=dev && npm ci --prefix frontend/amethyst2 --include=dev && npm run build --prefix frontend/amethyst2
+    startCommand: npm start --prefix backend
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: 24.14.0
+      - key: NODE_ENV
+        value: production
+      - key: MONGODB_URI
+        sync: false
+      - key: ORGANIZATION
+        value: amethyst
+      - key: ANTHROPIC_API_KEY
+        sync: false

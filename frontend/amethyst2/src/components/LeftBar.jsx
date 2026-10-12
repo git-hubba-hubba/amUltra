@@ -2,6 +2,7 @@ import SideTab from './SideTab'
 
 function LeftBar({currentDisplay, setCurrentDisplay}) {
   const sidetabs = [
+    { title: 'Jade', currentDisplayName: 'jade', symbol: 'jade' },
     {
       title: 'Members',
       img: 'https://cdn-icons-png.flaticon.com/512/1361/1361913.png',
