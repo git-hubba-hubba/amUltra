@@ -15,9 +15,22 @@ Use Node.js 22.13+ and a MongoDB replica set (or MongoDB Atlas). Replica-set sup
 
 Vite forwards `/api` to port 4000. Sign in using the bootstrapped administrator. Other users can sign up and log in immediately. Existing pending accounts become active on their next authenticated visit. New signups cannot choose admin privileges. In **Profile → Requests → Project admin access**, members request rights for a project; administrators approve or deny requests, grant rights directly to a member, or revoke existing grants. Members use **Refresh access** to see newly approved rights while logged in. Approvals never change the member’s account role.
 
+## Deploy to Render
+
+The root `render.yaml` builds the React frontend and serves it alongside the API in one Node web service. It selects the paid Starter plan so Jade's background processing stays running. Secrets are entered in Render, never committed in `.env`.
+
+1. Push the complete application, including `render.yaml`, to your GitHub repository.
+2. In Render, choose **New → Blueprint**, connect the repository, and review the service and plan.
+3. Set `MONGODB_URI` to a hosted MongoDB replica set (for example Atlas), including the database name. Allow the Render service's outbound IP addresses in the database network access settings. The local `127.0.0.1` address cannot be used.
+4. Set `ANTHROPIC_API_KEY` for Jade. Other optional backend variables from `backend/.env.example` can be added in Render. Leave `APP_ORIGIN` unset: the backend automatically allows `RENDER_EXTERNAL_URL`. For a custom domain, set `APP_ORIGIN` to its full HTTPS origin (comma-separated if allowing multiple origins).
+5. Deploy and verify `/api/health` and the login screen at the service URL.
+6. For a new database, temporarily set `ADMIN_EMAIL`, `ADMIN_NAME`, and `ADMIN_PASSWORD` (12+ characters) in Render. In the service Shell, run `cd backend && node src/bootstrap.js` once, then remove `ADMIN_PASSWORD`. Skip bootstrap if this database already has an administrator. Keep `ORGANIZATION` consistent with existing database accounts.
+
+Never put database credentials or API keys in frontend environment variables. Render supplies `PORT`; the app enables secure cookies in production and trusts Render's proxy for request rate limiting.
+
 ## Frontend structure
 
-The crystal landing opens authentication, which renders the original `components/Dashboard.jsx`. The original `Nav`, `LeftBar`, `SideTab`, `TaskHolder`, `Tasks`, and `Profile` components own the interface. Existing image URLs are retained. API-backed forms, dialogs, and review components are embedded in those containers. The layout keeps the black background, blue main-content border, top icon navigation, left navigation, and wide task cards.
+The crystal landing opens authentication, which renders the original `components/Dashboard.jsx`. The original `Nav`, `LeftBar`, `SideTab`, `TaskHolder`, `Tasks`, and `Profile` components own the interface. Navigation icons are bundled from `frontend/amethyst2/src/assets/icons` so deployments do not depend on external image hosts. API-backed forms, dialogs, and review components are embedded in those containers. The layout keeps the black background, blue main-content border, top icon navigation, left navigation, and wide task cards.
 
 
 ## Automation boundaries

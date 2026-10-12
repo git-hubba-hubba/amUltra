@@ -1,3 +1,9 @@
+import membersIcon from '../assets/icons/members.png'
+import overviewIcon from '../assets/icons/overview.svg'
+import meetingsIcon from '../assets/icons/meetings.jpg'
+import projectsIcon from '../assets/icons/projects.svg'
+import conceptIcon from '../assets/icons/concept.png'
+import roadmapIcon from '../assets/icons/roadmap.png'
 import SideTab from './SideTab'
 
 function LeftBar({currentDisplay, setCurrentDisplay}) {
@@ -5,32 +11,32 @@ function LeftBar({currentDisplay, setCurrentDisplay}) {
     { title: 'Jade', currentDisplayName: 'jade', symbol: 'jade' },
     {
       title: 'Members',
-      img: 'https://cdn-icons-png.flaticon.com/512/1361/1361913.png',
+      img: membersIcon,
       currentDisplayName: 'members'
     },
     {
       title: "Overview",
-      img: "https://png.pngtree.com/png-vector/20190929/ourmid/pngtree-presentation-icon-isolated-on-abstract-background-png-image_1752479.jpg",
+      img: overviewIcon,
       currentDisplayName:'overview'
     },
     {
       title: "Meetings",
-      img: "https://img.magnific.com/premium-vector/flat-meeting-icon-transparent-png-vector-layer-illustration_1226483-2779.jpg",
+      img: meetingsIcon,
       currentDisplayName:'meetings'
     },
     {
       title: "Projects",
-      img: "https://png.pngtree.com/png-vector/20190721/ourmid/pngtree-checklist-icon-for-your-project-png-image_1560043.jpg",
+      img: projectsIcon,
       currentDisplayName:'projects'
     },
     {
       title: "Concept",
-      img: "https://static.vecteezy.com/system/resources/thumbnails/043/364/386/small_2x/transparent-black-and-white-brain-logo-icon-minimalist-neural-symbol-free-png.png",
+      img: conceptIcon,
       currentDisplayName:'concept'
     },
     {
       title: "Roadmap",
-      img: "https://cdn-icons-png.magnific.com/256/15545/15545015.png?semt=ais_white_label",
+      img: roadmapIcon,
       currentDisplayName:'roadmap'
     }
   ]

@@ -13,7 +13,7 @@ import { jade } from './jade/routes.js';
 export const app=express();
 app.disable('x-powered-by');
 if(process.env.RENDER) app.set('trust proxy', 1);
-app.use(helmet());
+app.use(helmet({contentSecurityPolicy:{directives:{imgSrc:["'self'",'data:','https:']}}}));
 app.use(express.json({limit:'1mb'}));
 app.use(cookieParser());
 app.use('/api',rateLimit({windowMs:60000,limit:300,standardHeaders:'draft-8',legacyHeaders:false}));
