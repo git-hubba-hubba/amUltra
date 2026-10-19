@@ -6,7 +6,7 @@ export function isAdmin(user, department, project) {
 }
 export const recordProject = (item, kind) => kind === 'projects' || item.constructor?.modelName === 'Project' ? item._id : item.project;
 export function canEdit(user, item, kind) {
- return isAdmin(user, item.department, recordProject(item, kind)) || String(item.creator) === String(user._id) || String(item.owner) === String(user._id);
+ return isAdmin(user, item.department, recordProject(item, kind)) || String(item.creator) === String(user._id) || String(item.owner) === String(user._id) || (item.assignees || []).some(id => String(id) === String(user._id));
 }
 export function rankTasks(tasks, now = Date.now()) {
  const priorities = { Critical: 0, High: 1, Medium: 2, Low: 3 };

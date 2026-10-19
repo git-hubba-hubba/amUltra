@@ -5,7 +5,7 @@ import { parse } from 'csv-parse/sync';
 import mongoose from 'mongoose';
 import { Batch, Proposal, Task, Meeting, Project, User, Roadmap } from './models.js';
 import { requireValue, isAdmin, canEdit, validateDates } from './policy.js';
-import { scope, getItem, validateUser, audit } from './resources.js';
+import { scope, getItem, validateAssignees, audit } from './resources.js';
 import { detectColumns, nonemptyRow, normalizeRow } from './import-parser.js';
 export { normalizeRow } from './import-parser.js';
 export const intake=Router();
@@ -47,13 +47,14 @@ intake.post('/notes/import', upload.single('file'), async (req, res) => {
  requireValue(typeof text === 'string' && text.trim() && text.length <= 100000 && !text.includes('\0'), 'Provide text notes up to 100,000 characters');
  const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/).map((original, index) => ({ original, line: index + 1, title: original.trim().replace(/^(?:[-*+]\s+(?:\[[ xX]\]\s*)?|\d+[.)]\s+)/, '').trim() })).filter(item => item.title && !/^#{1,6}\s/.test(item.title));
  requireValue(lines.length > 0 && lines.length <= 100, 'Notes must contain 1–100 task lines; headings are skipped');
+ const assignees = await validateAssignees(req, req.body.assignees);
  const filename = req.file?.originalname || 'Pasted notes';
  let batch, items;
  await mongoose.connection.transaction(async session => {
   [batch] = await Batch.create([{ ...scope(req), creator: req.user._id, department: department.trim(), project: project?._id, filename }], { session });
   items = await Proposal.insertMany(lines.map(item => ({ ...scope(req), creator: req.user._id, department: department.trim(), project: project?._id, batch: batch._id, row: item.line,
    source: `${filename} / note line ${item.line}`, original: { kind: 'notes', text: item.original, line: item.line },
-   draft: { title: item.title.slice(0, 500), description: item.title, priority: 'Medium', difficulty: 3 },
+   draft: { title: item.title.slice(0, 500), description: item.title, priority: 'Medium', difficulty: 3, assignees, owner: assignees[0] },
    warnings: ['Manager must verify this note is actionable and review priority, difficulty, owner and deadline.'],
   })), { session });
  });
@@ -66,6 +67,7 @@ intake.post('/imports', upload.single('file'), async (req, res) => {
  const department = project?.department || req.body.department || req.user.department;
  const canAssign = isAdmin(req.user, department, project?._id);
  requireValue(department !== '*' && (canAssign || req.user.department === department), 'Department required', 403);
+ const uploadAssignees = req.body.assignees ? await validateAssignees(req, req.body.assignees) : null;
  const filename = req.file.originalname;
  const sheets = await readSheets(req.file);
  const members = await User.find({ organization: req.user.organization, status: { $in: ['active', 'pending'] } }).select('name email');
@@ -76,6 +78,11 @@ intake.post('/imports', upload.single('file'), async (req, res) => {
   rows.forEach((row, index) => {
    if (index <= detected.headerRow || !nonemptyRow(row)) return;
    const normalized = normalizeRow(row, detected.mapping, { members, canAssign, userId: req.user._id });
+   if (uploadAssignees) {
+    normalized.draft.assignees = uploadAssignees; normalized.draft.owner = uploadAssignees[0];
+    normalized.warnings = normalized.warnings.filter(warning => warning !== 'Missing owner' && !warning.startsWith('Resolve owner:') && warning !== 'Assigning this owner requires admin approval');
+    if (!canAssign && uploadAssignees.some(id => id !== String(req.user._id))) normalized.warnings.push('Delegation requires admin approval');
+   }
    drafts.push({ ...scope(req), creator: req.user._id, department, project: project?._id,
     source: `${filename} / ${sheet}`, row: index + 1, original: { sheet, cells: row },
     draft: normalized.draft, warnings: [...detected.warnings, ...normalized.warnings] });
@@ -89,7 +96,7 @@ intake.post('/imports', upload.single('file'), async (req, res) => {
   const proposals = await Proposal.insertMany(drafts.map(draft => ({ ...draft, batch: batchId })), { session });
   const complete = proposals.filter(proposal => !proposal.warnings.length);
   if (complete.length) {
-   const tasks = await Task.insertMany(complete.map(proposal => ({ ...proposal.draft.toObject(), organization: proposal.organization, department: proposal.department, project: proposal.project, creator: proposal.creator, sourceProposal: proposal._id })), { session });
+   const tasks = await Task.insertMany(complete.map(proposal => ({ ...proposal.draft.toObject(), assignees: proposal.draft.assignees?.length ? proposal.draft.assignees : [proposal.draft.owner], organization: proposal.organization, department: proposal.department, project: proposal.project, creator: proposal.creator, sourceProposal: proposal._id })), { session });
    await Proposal.bulkWrite(complete.map((proposal, index) => ({ updateOne: { filter: { _id: proposal._id }, update: { $set: { status: 'approved', task: tasks[index]._id, reason: 'Automatically generated from a complete row', reviewedAt: new Date() } } } })), { session });
   }
  });
@@ -153,7 +160,18 @@ intake.get('/proposals', async (req, res) => {
  if (req.query.batch) { requireValue(mongoose.isValidObjectId(req.query.batch), 'Invalid upload ID'); filter.batch = req.query.batch; }
  res.json(await Proposal.find(filter).sort({ createdAt: -1, row: 1 }).limit(req.query.batch ? 5000 : 500));
 });
-intake.patch('/proposals/:id',async(req,res)=> { const proposal=await getItem(req,Proposal,req.params.id); requireValue(isAdmin(req.user,proposal.department,proposal.project),'Project or department admin required',403); requireValue(proposal.status==='pending','Proposal already reviewed',409); requireValue(req.body.__v===proposal.__v,'Proposal changed; refresh',409); const d=req.body.draft; requireValue(d && typeof d.title==='string' && d.title.trim(),'Title required'); requireValue(['Critical','High','Medium','Low'].includes(d.priority),'Valid priority required'); requireValue(Number.isInteger(Number(d.difficulty))&&Number(d.difficulty)>=1&&Number(d.difficulty)<=5,'Difficulty must be 1–5'); if(d.dueDate) requireValue(Number.isFinite(Date.parse(d.dueDate)),'Invalid due date'); if(d.owner) await validateUser(req,d.owner); proposal.draft={title:d.title,description:d.description || '',priority:d.priority,difficulty:Number(d.difficulty),dueDate:d.dueDate || null,owner:d.owner || null}; requireValue(req.body.acknowledge===true,'Confirm you have reviewed the original source and resolved warnings'); proposal.warnings=[]; await proposal.save(); res.json(proposal); });
+intake.post('/proposals/:id/assign', async (req, res) => {
+ const proposal = await getItem(req, Proposal, req.params.id);
+ requireValue(isAdmin(req.user, proposal.department, proposal.project), 'Project or department admin required', 403);
+ requireValue(proposal.status === 'pending', 'Proposal already reviewed', 409);
+ requireValue(req.body.__v === proposal.__v, 'Draft changed; refresh', 409);
+ proposal.draft.assignees = await validateAssignees(req, req.body.assignees);
+ proposal.draft.owner = proposal.draft.assignees[0];
+ await proposal.save();
+ await audit(req, 'proposals', proposal._id, 'assign', { assignees: proposal.draft.assignees });
+ res.json(proposal);
+});
+intake.patch('/proposals/:id',async(req,res)=> { const proposal=await getItem(req,Proposal,req.params.id); requireValue(isAdmin(req.user,proposal.department,proposal.project),'Project or department admin required',403); requireValue(proposal.status==='pending','Proposal already reviewed',409); requireValue(req.body.__v===proposal.__v,'Proposal changed; refresh',409); const d=req.body.draft; requireValue(d && typeof d.title==='string' && d.title.trim(),'Title required'); requireValue(['Critical','High','Medium','Low'].includes(d.priority),'Valid priority required'); requireValue(Number.isInteger(Number(d.difficulty))&&Number(d.difficulty)>=1&&Number(d.difficulty)<=5,'Difficulty must be 1–5'); if(d.dueDate) requireValue(Number.isFinite(Date.parse(d.dueDate)),'Invalid due date'); const assignees=await validateAssignees(req,d.assignees ?? (d.owner ? [d.owner] : [])); proposal.draft={title:d.title,description:d.description || '',priority:d.priority,difficulty:Number(d.difficulty),dueDate:d.dueDate || null,owner:assignees[0],assignees}; requireValue(req.body.acknowledge===true,'Confirm you have reviewed the original source and resolved warnings'); proposal.warnings=[]; await proposal.save(); res.json(proposal); });
 intake.post('/proposals/:id/review', async (req, res) => {
  const { decision, reason, draft, acknowledge } = req.body;
  requireValue(['approved', 'denied'].includes(decision), 'Invalid decision');
@@ -172,14 +190,15 @@ intake.post('/proposals/:id/review', async (req, res) => {
    requireValue(['Critical', 'High', 'Medium', 'Low'].includes(draft.priority), 'Valid priority required');
    requireValue(Number.isInteger(Number(draft.difficulty)) && Number(draft.difficulty) >= 1 && Number(draft.difficulty) <= 5, 'Difficulty must be 1–5');
    if (draft.dueDate) requireValue(Number.isFinite(Date.parse(draft.dueDate)), 'Invalid deadline');
-   if (draft.owner) await validateUser(req, draft.owner);
-   proposal.draft = { title: draft.title.trim(), description: draft.description || '', priority: draft.priority, difficulty: Number(draft.difficulty), dueDate: draft.dueDate || null, owner: draft.owner || null };
+   const assignees = await validateAssignees(req, draft.assignees ?? (draft.owner ? [draft.owner] : []));
+   proposal.draft = { title: draft.title.trim(), description: draft.description || '', priority: draft.priority, difficulty: Number(draft.difficulty), dueDate: draft.dueDate || null, owner: assignees[0], assignees };
    proposal.warnings = [];
   }
   if (decision === 'approved') {
    requireValue(!proposal.warnings.length && proposal.draft.title, 'Review the flagged information before approving');
-   if (proposal.draft.owner) await validateUser(req, proposal.draft.owner);
-   const [task] = await Task.create([{ ...proposal.draft.toObject(), organization: proposal.organization, department: proposal.department, project: proposal.project, creator: proposal.creator, sourceProposal: proposal._id }], { session });
+   proposal.draft.assignees = await validateAssignees(req, proposal.draft.assignees?.length ? proposal.draft.assignees : proposal.draft.owner ? [proposal.draft.owner] : []);
+   proposal.draft.owner = proposal.draft.assignees[0];
+   const [task] = await Task.create([{ ...proposal.draft.toObject(), assignees: proposal.draft.assignees?.length ? proposal.draft.assignees : [proposal.draft.owner], organization: proposal.organization, department: proposal.department, project: proposal.project, creator: proposal.creator, sourceProposal: proposal._id }], { session });
    proposal.task = task._id;
   }
   proposal.status = decision;
@@ -192,5 +211,5 @@ intake.post('/proposals/:id/review', async (req, res) => {
  await audit(req, 'proposals', result._id, decision);
  res.json(result);
 });
-intake.post('/meetings/:id/transcript',upload.single('file'),async(req,res)=> { const meeting=await getItem(req,Meeting,req.params.id); requireValue(canEdit(req.user,meeting),'Not permitted',403); requireValue(req.file && /\.(txt|vtt|srt)$/i.test(req.file.originalname),'Upload a TXT, VTT or SRT transcript'); const text=req.file.buffer.toString('utf8'); requireValue(text.length<=500000,'Transcript too long'); const lines=text.split(/\r?\n/).map((body,i)=>({body:body.trim(),line:i+1})).filter(x=>x.body); const candidates=lines.filter(x=>/\b(will|action item|to do|follow up|need to|must)\b/i.test(x.body)).slice(0,100); const summary=lines.filter(x=>/\b(decid|agree|action|will|next|block|risk)\w*\b/i.test(x.body)).slice(0,12).map(x=>`Line ${x.line}: ${x.body}`).join('\n') || lines.slice(0,6).map(x=>`Line ${x.line}: ${x.body}`).join('\n');
- await mongoose.connection.transaction(async session=> { const fresh=await Meeting.findById(meeting._id).session(session); requireValue(fresh.__v===meeting.__v,'Meeting changed; retry',409); fresh.transcript=text;fresh.summary=summary;fresh.generationMethod='Extractive notes: original lines selected by action/decision keywords; review for completeness.'; await fresh.save({session}); await Proposal.deleteMany({meeting:meeting._id,status:'pending'},{session}); if(candidates.length) await Proposal.insertMany(candidates.map(x=>({...scope(req),creator:req.user._id,department:meeting.department,project:meeting.project,meeting:meeting._id,source:`${meeting.title} / transcript line ${x.line}`,original:x.body,draft:{title:x.body.slice(0,500),description:x.body,priority:'Medium',difficulty:3},warnings:['Review suggested task, priority, owner and deadline against transcript']})),{session}); }); res.json(await Meeting.findById(meeting._id)); });
+intake.post('/meetings/:id/transcript',upload.single('file'),async(req,res)=> { const meeting=await getItem(req,Meeting,req.params.id); requireValue(canEdit(req.user,meeting),'Not permitted',403); requireValue(req.file && /\.(txt|vtt|srt)$/i.test(req.file.originalname),'Upload a TXT, VTT or SRT transcript'); const assignees=await validateAssignees(req,req.body.assignees); const text=req.file.buffer.toString('utf8'); requireValue(text.length<=500000,'Transcript too long'); const lines=text.split(/\r?\n/).map((body,i)=>({body:body.trim(),line:i+1})).filter(x=>x.body); const candidates=lines.filter(x=>/\b(will|action item|to do|follow up|need to|must)\b/i.test(x.body)).slice(0,100); const summary=lines.filter(x=>/\b(decid|agree|action|will|next|block|risk)\w*\b/i.test(x.body)).slice(0,12).map(x=>`Line ${x.line}: ${x.body}`).join('\n') || lines.slice(0,6).map(x=>`Line ${x.line}: ${x.body}`).join('\n');
+ await mongoose.connection.transaction(async session=> { const fresh=await Meeting.findById(meeting._id).session(session); requireValue(fresh.__v===meeting.__v,'Meeting changed; retry',409); fresh.transcript=text;fresh.summary=summary;fresh.generationMethod='Extractive notes: original lines selected by action/decision keywords; review for completeness.'; await fresh.save({session}); await Proposal.deleteMany({meeting:meeting._id,status:'pending'},{session}); if(candidates.length) await Proposal.insertMany(candidates.map(x=>({...scope(req),creator:req.user._id,department:meeting.department,project:meeting.project,meeting:meeting._id,source:`${meeting.title} / transcript line ${x.line}`,original:x.body,draft:{title:x.body.slice(0,500),description:x.body,priority:'Medium',difficulty:3,assignees,owner:assignees[0]},warnings:['Review suggested task, priority, owner and deadline against transcript']})),{session}); }); res.json(await Meeting.findById(meeting._id)); });

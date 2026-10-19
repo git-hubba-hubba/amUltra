@@ -10,7 +10,6 @@ export default function Nav({ currentDisplay, setCurrentDisplay, search, setSear
           <img src={tasksIcon} alt="Tasks" className="navIcons" />
         </button>
         <button className="navIconButton" title="File uploader" aria-label="File uploader" onClick={() => setCurrentDisplay('fileUploader')}>
-          {reviewCount > 0 && <span className="reviewNotification" role="status" title={`${reviewCount} tasks need your approval`}>{reviewCount}<span className="visuallyHidden"> tasks need your approval</span></span>}
           <img src={uploadIcon} alt="Upload" className="navIcons" />
         </button>
       </div>
@@ -20,7 +19,7 @@ export default function Nav({ currentDisplay, setCurrentDisplay, search, setSear
           <img src={calendarIcon} alt="Calendar" className="navIcons" />
         </button>
         <button className="navIconButton" title="My profile" aria-label="My profile" onClick={() => setCurrentDisplay('profile')}>
-          {notificationCount > 0 && <span className="reviewNotification" role="status">{notificationCount}<span className="visuallyHidden"> unread task notifications</span></span>}
+          {reviewCount + notificationCount > 0 && <span className="reviewNotification" role="status" title={`${reviewCount} tasks need your approval · ${notificationCount} unread task notifications`}>{reviewCount + notificationCount}<span className="visuallyHidden">{reviewCount} tasks need your approval; {notificationCount} unread task notifications</span></span>}
           <img src={membersIcon} alt="Profile" className="navIcons" />
         </button>
         <p className="currentDisplay" aria-live="polite">{currentDisplay === 'jade' ? 'Jade' : currentDisplay}</p>

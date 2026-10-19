@@ -242,7 +242,3 @@
 body{
   font-family: serif;
 }
-
-/* Notes-generated drafts remain visible until manager approval. */
-.taskMajor.taskPendingApproval { opacity: .72; }
-.taskMajor.taskPendingApproval:focus-within { outline: 2px solid var(--accent); outline-offset: 3px; }

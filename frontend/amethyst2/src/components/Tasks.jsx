@@ -52,7 +52,7 @@ export default function Tasks({ record: initialRecord, user, open, refresh }) {
     catch (error) { setError(error.message); }
     finally { setBusy(false); }
   }
-  const ownedByMe = (record.owner?._id || record.owner) === user._id;
+  const ownedByMe = (record.owner?._id || record.owner) === user._id || (record.assignees || []).includes(user._id);
   const canEdit = editable(user, record);
   async function toggleFrozen() {
     if (busy) return;
@@ -72,9 +72,6 @@ export default function Tasks({ record: initialRecord, user, open, refresh }) {
     }
     if (clicks.current.click()) toggleFrozen();
   }
-  if (record.approvalPending) return <article className="taskMajor taskPendingApproval" data-task-id={record._id}><div className="taskFace taskFront">
-    <div className="taskHolder"><div className="taskBadge"><span>{record.department}</span><span>Awaiting manager approval</span></div><p className="taskTitle">{record.title}</p><hr /><p className="taskDesc">{record.description}</p><button onClick={() => open(record)}>Review draft</button></div><div className="taskManager"><small>Pending approval · not yet available for execution</small></div></div>
-  </article>;
   return (
     <>
     <article onClick={tripleClick} data-task-id={record._id} title="Triple-click the card to freeze or resume production" className={`taskMajor ${flipped ? 'flipped' : ''} ${record.status === 'done' ? 'taskCompleted' : ''} ${record.frozen ? 'taskFrozen' : ''}`}>

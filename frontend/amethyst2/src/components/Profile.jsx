@@ -2,14 +2,16 @@ import { api } from '../lib/api';
 import { useState } from 'react';
 import { useResource } from '../lib/useResource';
 import Tasks from './Tasks';
+import AdminDashboard from './AdminDashboard';
 import TaskFreezeSurface from './TaskFreezeSurface';
 import Cinemas from './Cinemas';
 import ProjectAccess from '../features/workspace/ProjectAccess';
 import { RecordDetail } from '../features/workspace/Records';
 import Feedback from '../features/shared/Feedback';
 
-export default function Profile({ user, q, members, projects, onAccessChanged, logout, notifications }) {
-  const [tab, setTab] = useState('Tasks');
+export default function Profile({ user, q, members, projects, onAccessChanged, logout, notifications, onIntakeChanged }) {
+  const canReview = user.role === 'admin' || !!user.projectAdminIds?.length;
+  const [tab, setTab] = useState(() => canReview ? 'Admin Dashboard' : 'Tasks');
   const [selected, setSelected] = useState(null);
   const [mode, setMode] = useState('');
   const [error, setError] = useState('');
@@ -23,8 +25,9 @@ export default function Profile({ user, q, members, projects, onAccessChanged, l
         <img src="https://images.unsplash.com/photo-1511367461989-f85a21fda167?q=80&w=1031&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fA%3D%3D" alt="" className="myPic" />
         <div className="profileContact"><h2 className="proName">{user.name}</h2><p className="proOcc">{user.department} · {user.role}</p><p>{user.email}</p></div>
       </div>
-      <div className="profileSubNav">{['Tasks', 'Cinemas', 'Requests', 'Metrics'].map(name => <button key={name} aria-pressed={tab === name} onClick={() => setTab(name)}>{name}</button>)}</div>
+      <div className="profileSubNav">{[...(canReview ? ['Admin Dashboard'] : []), 'Tasks', 'Cinemas', 'Requests', 'Metrics'].map(name => <button key={name} aria-pressed={tab === name} onClick={() => setTab(name)}>{name}</button>)}</div>
     </div>
+    {canReview && tab === 'Admin Dashboard' && <AdminDashboard user={user} members={members} q={q} onChanged={() => { queue.refresh(); onIntakeChanged?.(); }} />}
     {tab === 'Tasks' && <>
       <section className="panel"><h2>Shared with you</h2><Feedback loading={notifications?.loading} error={notifications?.error} />
         {notifications?.data?.items.length === 0 && <p>No task notifications yet.</p>}

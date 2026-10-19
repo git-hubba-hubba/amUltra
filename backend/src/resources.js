@@ -9,6 +9,14 @@ export const scope = req => ({ organization: req.user.organization, archived: fa
 export async function audit(req, resource, id, action, detail) { await Audit.create({organization:req.user.organization,actor:req.user._id,resource,resourceId:id,action,detail}); }
 export async function getItem(req, Model, id) { requireValue(mongoose.isValidObjectId(id),'Invalid record ID'); const item=await Model.findOne({...scope(req),_id:id}); requireValue(item,'Record not found',404); return item; }
 export async function validateUser(req, id) { requireValue(mongoose.isValidObjectId(id),'Invalid member'); const user=await User.findOne({_id:id,organization:req.user.organization,status:{$in:['active','pending']}}); requireValue(user,'Active member not found'); return user; }
+export async function validateAssignees(req, values) {
+ if (typeof values === 'string') values = [values];
+ requireValue(Array.isArray(values) && values.length > 0, 'Assign at least one member');
+ requireValue(values.length <= 500 && values.every(id => typeof id === 'string' || id instanceof mongoose.Types.ObjectId), 'Invalid assignees');
+ const ids = [...new Set(values.map(String))];
+ await Promise.all(ids.map(id => validateUser(req, id)));
+ return ids;
+}
 const fields = {
  tasks: ['frozen','title','description','department','team','priority','difficulty','status','startDate','dueDate','project','blockedReason'],
  projects: ['title','description','department','team','priority','status','startDate','dueDate','featured'],
@@ -39,11 +47,18 @@ resources.post('/tasks/:id/share', async (req, res) => {
  const notification = await Notification.create({organization:req.user.organization, recipient:recipient._id, sender:req.user._id, task:task._id, title:task.title});
  res.status(201).json(notification);
 });
-resources.get('/queue',async(req,res)=>res.json(rankTasks(await Task.find({...scope(req),owner:req.user._id}).lean())));
+resources.get('/queue',async(req,res)=>res.json(rankTasks(await Task.find({...scope(req),$or:[{assignees:req.user._id},{owner:req.user._id}]}).lean())));
 resources.get('/overview', getOverview);
 resources.get('/audit/:kind/:id',async(req,res)=> { requireValue(models[req.params.kind],'Unknown resource'); await getItem(req,models[req.params.kind],req.params.id); res.json(await Audit.find({organization:req.user.organization,resource:req.params.kind,resourceId:req.params.id}).sort({createdAt:-1}).limit(100)); });
-resources.post('/tasks/:id/claim',async(req,res)=> { const task=await getItem(req,Task,req.params.id); requireValue(!['done','cancelled'].includes(task.status),'Task is closed',409); const claimed=await Task.findOneAndUpdate({...scope(req),_id:task._id,owner:null,status:{$nin:['done','cancelled']}},{$set:{owner:req.user._id},$inc:{__v:1},$push:{assignmentHistory:{actor:req.user._id,next:req.user._id,at:new Date()}}},{new:true}); requireValue(claimed,'This task is already owned',409); await audit(req,'tasks',task._id,'claim'); res.json(claimed); });
-resources.post('/tasks/:id/assign',async(req,res)=> { const task=await getItem(req,Task,req.params.id); requireValue(isAdmin(req.user,task.department,task.project),'Project or department admin required',403); const user=await validateUser(req,req.body.owner); task.assignmentHistory.push({actor:req.user._id,previous:task.owner,next:user._id,at:new Date()}); task.owner=user._id; await task.save(); await audit(req,'tasks',task._id,'assign',{owner:user._id}); res.json(task); });
+resources.post('/tasks/:id/claim',async(req,res)=> { const task=await getItem(req,Task,req.params.id); requireValue(!['done','cancelled'].includes(task.status),'Task is closed',409); const claimed=await Task.findOneAndUpdate({...scope(req),_id:task._id,owner:null,assignees:{$in:[null,[]]},status:{$nin:['done','cancelled']}},{$set:{owner:req.user._id,assignees:[req.user._id]},$inc:{__v:1},$push:{assignmentHistory:{actor:req.user._id,next:req.user._id,at:new Date()}}},{new:true}); requireValue(claimed,'This task is already owned',409); await audit(req,'tasks',task._id,'claim'); res.json(claimed); });
+resources.post('/tasks/:id/assign',async(req,res)=> {
+ const task=await getItem(req,Task,req.params.id);
+ requireValue(isAdmin(req.user,task.department,task.project),'Project or department admin required',403);
+ const assignees=await validateAssignees(req,req.body.assignees ?? (req.body.owner ? [req.body.owner] : []));
+ task.assignmentHistory.push({actor:req.user._id,previous:task.owner,next:assignees[0],at:new Date()});
+ task.assignees=assignees; task.owner=assignees[0]; await task.save();
+ await audit(req,'tasks',task._id,'assign',{assignees}); res.json(task);
+});
 resources.post('/tasks/:id/actions',async(req,res)=> { const task=await getItem(req,Task,req.params.id); requireValue(canEdit(req.user,task),'Only owner, creator or admin can update action items',403); requireValue(typeof req.body.title==='string' && req.body.title.trim(),'Action title required'); task.actionItems.push({title:req.body.title.trim(),creator:req.user._id}); await task.save(); res.status(201).json(task); });
 resources.patch('/tasks/:id/actions/:action',async(req,res)=> { const task=await getItem(req,Task,req.params.id); requireValue(canEdit(req.user,task),'Not permitted',403); const item=task.actionItems.id(req.params.action); requireValue(item,'Action item not found',404); requireValue(typeof req.body.done==='boolean','Done must be a boolean'); item.done=req.body.done; await task.save(); res.json(task); });
 resources.post('/:kind/:id/comments',async(req,res)=> { const Model=models[req.params.kind]; requireValue(Model,'Unknown resource',404); const item=await getItem(req,Model,req.params.id); requireValue(typeof req.body.body==='string' && req.body.body.trim(),'Comment required'); if(req.body.parent) requireValue(item.comments.id(req.body.parent),'Parent comment not found'); item.comments.push({author:req.user._id,body:req.body.body.trim(),parent:req.body.parent || undefined}); await item.save(); res.status(201).json(item); });
@@ -67,6 +82,10 @@ resources.post('/:kind', async (req, res, next) => {
   requireValue(isAdmin(req.user, data.department, data.project), 'Admin assignment required', 403);
   if (req.body.owner) await validateUser(req, req.body.owner);
   data.owner = req.body.owner || null;
+ }
+ if (kind === 'tasks') {
+  data.assignees = await validateAssignees(req, req.body.assignees);
+  data.owner = data.assignees[0];
  }
  validateDates({ ...data, status: data.status || 'todo' }, kind);
  const item = await models[kind].create({ ...data, organization: req.user.organization, creator: req.user._id });
@@ -99,6 +118,12 @@ resources.patch('/:kind/:id', async (req, res, next) => {
  }
  if (kind === 'tasks' && !managesItem) {
   for (const key of ['priority', 'difficulty']) requireValue(data[key] === undefined || data[key] === item[key], 'Admin required to change tier', 403);
+ }
+ if (kind === 'tasks' && Object.hasOwn(req.body, 'assignees')) {
+  const ids = await validateAssignees(req, req.body.assignees);
+  const previous = (item.assignees?.length ? item.assignees : item.owner ? [item.owner] : []).map(String);
+  requireValue(managesItem || (ids.length === previous.length && ids.every(id => previous.includes(id))), 'Admin assignment required', 403);
+  data.assignees = managesItem ? ids : previous; data.owner = data.assignees[0];
  }
  const combined = { ...item.toObject(), ...data };
  if (Object.hasOwn(data, 'project') || Object.hasOwn(data, 'department')) await validateProjectLink(req, combined);

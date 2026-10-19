@@ -211,7 +211,7 @@ async function createDelegatedTasks(run, records, session) {
     const item = assistant.data.items[assignment.itemIndex]; const key = `${run._id}:${run.revision}:${assignment.itemIndex}`;
     const task = await Task.findOneAndUpdate({ jadeSource: key }, { $setOnInsert: {
       jadeSource: key, organization: run.organization, department: run.department, project: run.project,
-      creator: run.creator, owner: assignment.userId, title: item.title.slice(0, 500), priority: item.priority,
+      creator: run.creator, owner: assignment.userId, assignees: [assignment.userId], title: item.title.slice(0, 500), priority: item.priority,
       description: `${item.description}\n\nBusiness need: ${item.businessNeed}\nUrgency: ${item.urgency}\nJade run: ${run.title}\nSources: ${item.sourceIds.join(', ')}\nDelegation: ${assignment.rationale}`.slice(0, 30000), status: 'todo',
     } }, { upsert: true, new: true, session, runValidators: true }); ids.push(task._id);
   }

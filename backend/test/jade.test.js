@@ -34,7 +34,7 @@ before(async () => {
     { name: 'Foreign', email: 'jade-foreign@example.test', organization: 'foreign', role: 'admin', department: '*' },
   ].map(user => ({ ...user, passwordHash: hashPassword(password), status: 'active' })));
   for (const user of [admin, member, foreign]) {
-    clients[user.name] = request.agent(app);
+    clients[user.name] = await siteClient();
     await clients[user.name].post('/api/auth/login').send({ email: user.email, password }).expect(200);
     await clients[user.name].post('/api/jade/unlock').send({ password: 'jasmine_tea' }).expect(200);
   }
@@ -81,7 +81,7 @@ async function drain(provider, maximum = stages.length + 2) {
 }
 
 test('Jade uploads enforce authentication, admin rights, organization isolation and hide source bytes', async () => {
-  await request(app).get('/api/jade/status').expect(401);
+  await (await siteClient()).get('/api/jade/status').expect(401);
   await clients['Sales rep'].post('/api/jade/runs').expect(403);
   const run = await upload('Permissions fixture');
   assert.equal(run.sources[0].bytes, undefined);
@@ -94,7 +94,7 @@ test('Jade uploads enforce authentication, admin rights, organization isolation 
 });
 
 test('Jade password protects every data route, is session-bound, expires and can be relocked', async () => {
-  const client = request.agent(app);
+  const client = await siteClient();
   await client.post('/api/auth/login').send({ email: admin.email, password }).expect(200);
   assert.deepEqual((await client.get('/api/jade/access').expect(200)).body, { unlocked: false });
   for (const path of ['/api/jade/status', '/api/jade/runs', `/api/jade/runs/${new mongoose.Types.ObjectId()}/presentation.pdf`]) {
@@ -106,7 +106,7 @@ test('Jade password protects every data route, is session-bound, expires and can
   await client.get('/api/jade/status').expect(403);
   await client.post('/api/jade/unlock').send({ password: 'jasmine_tea' }).expect(200);
   await client.get('/api/jade/status').expect(200);
-  const anotherSession = request.agent(app);
+  const anotherSession = await siteClient();
   await anotherSession.post('/api/auth/login').send({ email: admin.email, password }).expect(200);
   await anotherSession.get('/api/jade/status').expect(403);
   await client.post('/api/jade/lock').expect(200);
@@ -356,9 +356,9 @@ test('execution lights follow actual stages, revisions and review pauses', async
 test('SSE streams real Mongo transitions, excludes source bytes and closes when Jade locks', { timeout: 15000 }, async () => {
   const run = await upload('Live diagram test');
   await clients.Foreign.get(`/api/jade/runs/${run._id}/events`).expect(404);
-  const login = await request(app).post('/api/auth/login').send({ email: admin.email, password }).expect(200);
-  const cookie = login.headers['set-cookie'].map(value => value.split(';')[0]).join('; ');
-  await request(app).post('/api/jade/unlock').set('Cookie', cookie).send({ password: 'jasmine_tea' }).expect(200);
+  const login = await (await siteClient()).post('/api/auth/login').send({ email: admin.email, password }).expect(200);
+  const cookie = [(await siteClient()).siteCookie, ...login.headers['set-cookie'].map(value => value.split(';')[0])].join('; ');
+  await (await siteClient()).post('/api/jade/unlock').set('Cookie', cookie).send({ password: 'jasmine_tea' }).expect(200);
   const server = app.listen(0, '127.0.0.1');
   await new Promise(resolve => server.once('listening', resolve));
   const controller = new AbortController();
@@ -389,7 +389,7 @@ test('SSE streams real Mongo transitions, excludes source bytes and closes when 
     const transition = await nextEvent();
     assert.match(transition, /"currentAgent":"metrics"/);
     assert.match(transition, /"status":"running"/);
-    await request(app).post('/api/jade/lock').set('Cookie', cookie).expect(200);
+    await (await siteClient()).post('/api/jade/lock').set('Cookie', cookie).expect(200);
     await JadeRun.updateOne({ _id: run._id }, { $set: { currentAgent: 'projects' } });
     assert.match(await nextEvent(), /event: locked/);
     assert.equal((await reader.read()).done, true);
@@ -399,3 +399,11 @@ test('SSE streams real Mongo transitions, excludes source bytes and closes when 
     await new Promise(resolve => server.close(resolve));
   }
 });
+
+
+async function siteClient() {
+ const client = request.agent(app);
+ const unlocked = await client.post('/api/site-access/unlock').send({ code: '214723' }).expect(200);
+ client.siteCookie = unlocked.headers['set-cookie'][0].split(';')[0];
+ return client;
+}

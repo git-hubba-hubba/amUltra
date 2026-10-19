@@ -3,7 +3,7 @@ import logo from '../../assets/amethyst-logo.png'
 import './CrystalLanding.css'
 import { pieces } from './crystalGeometry'
 
-const TOTAL = 8
+const TOTAL = 3
 
 
 export default function CrystalLanding({ onEnter }) {

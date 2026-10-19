@@ -31,7 +31,7 @@ before(async () => {
   ];
   users = await User.create(specs.map(user => ({ organization: 'amethyst', role: 'member', status: 'active', passwordHash: hashPassword(password), ...user })));
   for (const user of users) {
-    const client = request.agent(app);
+    const client = await siteClient();
     await client.post('/api/auth/login').send({ email: user.email, password }).expect(200);
     clients[user.name] = client;
   }
@@ -45,8 +45,8 @@ after(async () => {
 const createTask = (overrides = {}) => Task.create({ organization: 'amethyst', department: 'Engineering', creator: users[0]._id, title: 'Test task', ...overrides });
 
 test('signup enables immediate workspace reads without granting admin rights; logout remains enforced', async () => {
-  await request(app).get('/api/tasks').expect(401);
-  const client = request.agent(app);
+  await (await siteClient()).get('/api/tasks').expect(401);
+  const client = await siteClient();
   const signup = await client.post('/api/auth/signup').send({ name: 'New member', email: 'new@example.test', password, department: 'Engineering', role: 'admin', status: 'pending', organization: 'other-org', projectAdminIds: [id(users[0])] }).expect(201);
   assert.equal(signup.body.user.role, 'member');
   assert.equal(signup.body.user.status, 'active');
@@ -80,7 +80,7 @@ test('malformed stored passwords return a generic login rejection without creati
     for (const [name, passwordHash] of cases) {
       await t.test(name, async () => {
         await User.collection.updateOne({ _id: user._id }, passwordHash === undefined ? { $unset: { passwordHash: '' } } : { $set: { passwordHash } });
-        const response = await request(app).post('/api/auth/login').send({ email: user.email, password }).expect(401);
+        const response = await (await siteClient()).post('/api/auth/login').send({ email: user.email, password }).expect(401);
         assert.deepEqual(response.body, { error: 'Invalid email or password' });
         assert.equal(response.headers['set-cookie'], undefined);
         assert.equal(await Session.countDocuments({ user: user._id }), 0);
@@ -95,7 +95,7 @@ test('malformed stored passwords return a generic login rejection without creati
 test('unknown email and incorrect password return the same rejection without creating sessions', async () => {
   const sessionCount = await Session.countDocuments();
   for (const email of ['unknown-login@example.test', users[2].email]) {
-    const response = await request(app).post('/api/auth/login').send({ email, password: 'incorrect-test-password' }).expect(401);
+    const response = await (await siteClient()).post('/api/auth/login').send({ email, password: 'incorrect-test-password' }).expect(401);
     assert.deepEqual(response.body, { error: 'Invalid email or password' });
     assert.equal(response.headers['set-cookie'], undefined);
   }
@@ -255,7 +255,7 @@ test('transcript processing creates traceable proposals and never publishes task
   const created = await clients.Alice.post('/api/meetings').send({ title: 'Weekly meeting', department: 'Engineering', heldAt: '2027-01-04T15:00:00Z' }).expect(201);
   const beforeTasks = await Task.countDocuments();
   const transcript = 'Alice: We agreed to validate the release.\nBob: I will write the checklist.\nAlice: There is a risk with timing.';
-  const result = await clients.Alice.post(`/api/meetings/${created.body._id}/transcript`).attach('file', Buffer.from(transcript), 'meeting.txt').expect(200);
+  const result = await clients.Alice.post(`/api/meetings/${created.body._id}/transcript`).field('assignees', id(users[2])).attach('file', Buffer.from(transcript), 'meeting.txt').expect(200);
   assert.match(result.body.summary, /Line 2: Bob: I will/);
   assert.match(result.body.generationMethod, /Extractive/);
   const suggestions = await Proposal.find({ meeting: created.body._id });
@@ -273,7 +273,7 @@ test('cross-origin mutation requests are rejected', async () => {
 test('legacy pending accounts can log in and read other departments without account activation', async () => {
   const user = await User.create({ organization: 'amethyst', name: 'Legacy reader', email: 'legacy-reader@example.test', department: 'Engineering', status: 'pending', passwordHash: hashPassword(password) });
   const task = await createTask({ title: 'Finance read access', department: 'Finance' });
-  const client = request.agent(app);
+  const client = await siteClient();
   const result = await client.post('/api/auth/login').send({ email: user.email, password }).expect(200);
   assert.equal(result.body.status, 'active');
   assert.equal(result.body.role, 'member');
@@ -344,17 +344,17 @@ test('project grants cover intake, transcript proposals and Cinema without expan
   assert.equal(id(proposal.project), id(project));
   assert.ok((await clients.Alice.get(`/api/proposals?batch=${batch.body._id}`).expect(200)).body.some(item => item._id === id(proposal)));
   assert.deepEqual((await clients.Bob.get(`/api/proposals?batch=${batch.body._id}`).expect(200)).body, []);
-  const approved = await clients.Alice.post(`/api/proposals/${proposal._id}/review`).send({ decision: 'approved', __v: proposal.__v, acknowledge: true, draft: { title: proposal.draft.title, description: 'Reviewed import', priority: 'High', difficulty: 3 } }).expect(200);
+  const approved = await clients.Alice.post(`/api/proposals/${proposal._id}/review`).send({ decision: 'approved', __v: proposal.__v, acknowledge: true, draft: { title: proposal.draft.title, description: 'Reviewed import', priority: 'High', difficulty: 3, assignees: [id(users[2])] } }).expect(200);
   const task = await Task.findById(approved.body.task);
   assert.equal(id(task.project), id(project));
   const unrelated = await Proposal.create({ organization: 'amethyst', department: 'Finance', creator: users[0]._id, source: 'unlinked.csv', draft: { title: 'Not in project', priority: 'Medium', difficulty: 3 }, warnings: [] });
   await clients.Alice.post(`/api/proposals/${unrelated._id}/review`).send({ decision: 'approved' }).expect(403);
   await clients.Alice.patch(`/api/proposals/${unrelated._id}`).send({ __v: 0, acknowledge: true, draft: { title: 'Bypass', priority: 'Medium', difficulty: 3, project: id(project) } }).expect(403);
   const meeting = await clients.Admin.post('/api/meetings').send({ title: 'Finance meeting', department: 'Finance', project: id(project), heldAt: '2027-01-01T12:00:00Z' }).expect(201);
-  await clients.Alice.post(`/api/meetings/${meeting.body._id}/transcript`).attach('file', Buffer.from('We will review the budget.'), 'finance.txt').expect(200);
+  await clients.Alice.post(`/api/meetings/${meeting.body._id}/transcript`).field('assignees', id(users[2])).attach('file', Buffer.from('We will review the budget.'), 'finance.txt').expect(200);
   const suggestion = await Proposal.findOne({ meeting: meeting.body._id });
   assert.equal(id(suggestion.project), id(project));
-  await clients.Alice.patch(`/api/proposals/${suggestion._id}`).send({ __v: 0, acknowledge: true, draft: { title: 'Review budget', priority: 'High', difficulty: 2 } }).expect(200);
+  await clients.Alice.patch(`/api/proposals/${suggestion._id}`).send({ __v: 0, acknowledge: true, draft: { title: 'Review budget', priority: 'High', difficulty: 2, assignees: [id(users[2])] } }).expect(200);
   await clients.Alice.post(`/api/proposals/${suggestion._id}/review`).send({ decision: 'approved' }).expect(200);
   const cinema = await clients.Admin.post('/api/cinemas').send({ title: 'Scoped Cinema', department: 'Finance', task: id(task), rubric: 'Review scope', reviewers: [id(users[3])] }).expect(201);
   assert.equal(cinema.body.project, id(project));
@@ -395,7 +395,7 @@ test('screenshot data maps to linked components, disables directory logins, and 
   // Even a valid stored password must not turn a directory entry into a login.
   directory.passwordHash = hashPassword(password);
   await directory.save();
-  await request(app).post('/api/auth/login').send({ email: directory.email, password }).expect(401);
+  await (await siteClient()).post('/api/auth/login').send({ email: directory.email, password }).expect(401);
   avpTask.title = 'User-edited source task';
   await avpTask.save();
   const repeat = await seedScreenshots('screenshot-test');
@@ -485,7 +485,7 @@ test('roadmap uploads create entries atomically and enforce admin scope', async 
 test('any workspace member can freeze and resume while other edits remain protected', async () => {
   const task = await createTask({ creator: users[2]._id, title: 'Freeze production', status: 'in_progress' });
   const path = `/api/tasks/${id(task)}`;
-  await request(app).patch(path).send({ frozen: true, __v: task.__v }).expect(401);
+  await (await siteClient()).patch(path).send({ frozen: true, __v: task.__v }).expect(401);
   for (const extra of [{ title: 'Unauthorized edit' }, { status: 'done' }, { owner: id(users[3]) }, { department: 'Sales' }]) {
     await clients.Bob.patch(path).send({ frozen: true, __v: task.__v, ...extra }).expect(403);
   }
@@ -505,7 +505,7 @@ test('any workspace member can freeze and resume while other edits remain protec
 test('legacy tasks without a frozen field and newly created tasks can freeze and resume', async () => {
   const legacy = await createTask({ title: 'Legacy freeze coverage', creator: users[2]._id });
   await Task.collection.updateOne({ _id: legacy._id }, { $unset: { frozen: '' } });
-  const created = await clients.Alice.post('/api/tasks').send({ title: 'New freeze coverage', department: 'Engineering' }).expect(201);
+  const created = await clients.Alice.post('/api/tasks').send({ title: 'New freeze coverage', department: 'Engineering', assignees: [id(users[2])] }).expect(201);
   for (const taskId of [id(legacy), created.body._id]) {
     const path = `/api/tasks/${taskId}`;
     const before = await clients.Alice.get(path).expect(200);
@@ -517,7 +517,7 @@ test('legacy tasks without a frozen field and newly created tasks can freeze and
 });
 
 test('notes generate separate pending dashboard drafts; only an authorized manager can activate them', async () => {
- const response = await clients.Alice.post('/api/notes/import').field('department', 'Engineering')
+ const response = await clients.Alice.post('/api/notes/import').field('department', 'Engineering').field('assignees', id(users[2]))
   .attach('file', Buffer.from('# Meeting notes\n- Follow up with the customer\n2. Prepare the sales report\n'), 'notes.md').expect(201);
  assert.equal(response.body.needsReview, 2);
  assert.deepEqual(response.body.items, []);
@@ -555,10 +555,77 @@ test('notes generate separate pending dashboard drafts; only an authorized manag
 });
 
 test('notes upload accepts pasted text and validates empty, unsupported, excessive and unauthorized input', async () => {
- await clients.Alice.post('/api/notes/import').send({ department: 'Engineering', notes: 'Review the customer request\n- Update the report' }).expect(201);
+ await clients.Alice.post('/api/notes/import').send({ department: 'Engineering', assignees: [id(users[2])], notes: 'Review the customer request\n- Update the report' }).expect(201);
  await clients.Alice.post('/api/notes/import').send({ department: 'Sales', notes: 'Update report' }).expect(403);
  await clients.Alice.post('/api/notes/import').send({ department: 'Engineering', notes: '# Heading\n\n' }).expect(400);
  await clients.Alice.post('/api/notes/import').send({ department: 'Engineering', notes: Array(101).fill('Task').join('\n') }).expect(400);
  await clients.Alice.post('/api/notes/import').field('department', 'Engineering').attach('file', Buffer.from('Task'), 'notes.exe').expect(400);
  await clients.Alice.post('/api/notes/import').field('department', 'Engineering').field('notes', 'Other task').attach('file', Buffer.from('Task'), 'notes.txt').expect(400);
 });
+
+
+test('tasks require validated delegation and multiple assignees share queues and edit access', async () => {
+ const body = { title: 'Shared delegation', department: 'Engineering' };
+ await clients.Alice.post('/api/tasks').send(body).expect(400);
+ await clients.Alice.post('/api/tasks').send({ ...body, assignees: [] }).expect(400);
+ await clients.Admin.post('/api/tasks').send({ ...body, assignees: [id(users[4])] }).expect(400);
+ const directory = await User.create({ organization: 'amethyst', name: 'Delegation directory member', email: 'delegation-directory@example.test', passwordHash: 'disabled', loginEnabled: false, department: 'Finance' });
+ const directoryTask = await clients.Admin.post('/api/tasks').send({ ...body, assignees: [id(directory)] }).expect(201);
+ assert.deepEqual(directoryTask.body.assignees, [id(directory)]);
+ const created = await clients.Admin.post('/api/tasks').send({ ...body, assignees: [id(users[2]), id(users[3]), id(users[2])] }).expect(201);
+ assert.deepEqual(created.body.assignees, [id(users[2]), id(users[3])]);
+ for (const name of ['Alice', 'Bob']) {
+  assert.ok((await clients[name].get('/api/queue').expect(200)).body.some(task => task._id === created.body._id));
+  await clients[name].post(`/api/tasks/${created.body._id}/actions`).send({ title: `${name} can collaborate` }).expect(201);
+ }
+ const editableTask = (await clients.Bob.get(`/api/tasks/${created.body._id}`).expect(200)).body;
+ await clients.Bob.patch(`/api/tasks/${created.body._id}`).send({ __v: editableTask.__v, description: 'Co-assignee edit', assignees: [...created.body.assignees].reverse() }).expect(200);
+ await clients.Bob.post(`/api/tasks/${created.body._id}/assign`).send({ assignees: [id(users[3])] }).expect(403);
+ await clients.Admin.post(`/api/tasks/${created.body._id}/assign`).send({ assignees: [] }).expect(400);
+ await clients.Admin.post(`/api/tasks/${created.body._id}/assign`).send({ assignees: [id(users[3])] }).expect(200);
+ assert.ok(!(await clients.Alice.get('/api/queue').expect(200)).body.some(task => task._id === created.body._id));
+ const current = (await clients.Admin.get(`/api/tasks/${created.body._id}`).expect(200)).body;
+ await clients.Admin.patch(`/api/tasks/${created.body._id}`).send({ __v: current.__v, assignees: [] }).expect(400);
+});
+
+test('draft delegation persists without approval and approval requires at least one member', async () => {
+ const proposal = await Proposal.create({ organization: 'amethyst', department: 'Engineering', creator: users[2]._id, source: 'delegation-test', draft: { title: 'Delegate before approval', priority: 'Medium', difficulty: 3 }, warnings: ['Review source'] });
+ const path = `/api/proposals/${proposal._id}`;
+ await clients.Alice.post(`${path}/assign`).send({ __v: 0, assignees: [id(users[2])] }).expect(403);
+ await clients.Admin.post(`${path}/assign`).send({ __v: 0, assignees: [] }).expect(400);
+ await clients.Admin.post(`${path}/assign`).send({ __v: 0, assignees: [id(users[4])] }).expect(400);
+ const delegated = await clients.Admin.post(`${path}/assign`).send({ __v: 0, assignees: [id(users[2]), id(users[3])] }).expect(200);
+ assert.equal(delegated.body.status, 'pending');
+ assert.deepEqual(delegated.body.warnings, ['Review source']);
+ assert.equal(await Task.countDocuments({ sourceProposal: proposal._id }), 0);
+ await clients.Admin.post(`${path}/assign`).send({ __v: 0, assignees: [id(users[2])] }).expect(409);
+ const review = { decision: 'approved', __v: delegated.body.__v, acknowledge: true, draft: { title: 'Delegated', priority: 'High', difficulty: 2, assignees: [] } };
+ await clients.Admin.post(`${path}/review`).send(review).expect(400);
+ review.draft.assignees = [id(users[2]), id(users[3])];
+ const approved = await clients.Admin.post(`${path}/review`).send(review).expect(200);
+ const task = await Task.findById(approved.body.task);
+ assert.deepEqual(task.assignees.map(String), review.draft.assignees);
+ assert.equal(await Task.countDocuments({ sourceProposal: proposal._id }), 1);
+});
+
+
+test('notes and spreadsheet uploads retain multiple delegates on drafts and published tasks', async () => {
+ await clients.Admin.post('/api/notes/import').send({ department: 'Engineering', notes: 'Needs a delegate' }).expect(400);
+ const assignees = [id(users[2]), id(users[3])];
+ const notes = await clients.Admin.post('/api/notes/import').send({ department: 'Engineering', notes: 'Prepare report', assignees }).expect(201);
+ assert.deepEqual(notes.body.items[0].draft.assignees, assignees);
+ assert.equal(notes.body.items[0].status, 'pending');
+ const csv = 'Action,Notes,Priority,Due,Difficulty\nShared upload,Release checklist,High,2027-01-04,2\n';
+ const upload = await clients.Admin.post('/api/imports').field('department', 'Engineering').field('assignees', assignees).attach('file', Buffer.from(csv), 'delegates.csv').expect(201);
+ assert.equal(upload.body.generated, 1);
+ const task = await Task.findById(upload.body.items[0].task);
+ assert.deepEqual(task.assignees.map(String), assignees);
+});
+
+
+async function siteClient() {
+ const client = request.agent(app);
+ const unlocked = await client.post('/api/site-access/unlock').send({ code: '214723' }).expect(200);
+ client.siteCookie = unlocked.headers['set-cookie'][0].split(';')[0];
+ return client;
+}

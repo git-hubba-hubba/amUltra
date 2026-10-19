@@ -20,7 +20,7 @@ export async function getOverview(req, res) {
   const [tasks, projects, projectTasks] = await Promise.all([
     Task.find({ ...taskFilter, ...keyword }).lean(),
     Project.find({ ...projectFilter, ...keyword }).lean(),
-    Task.find(taskFilter).select('project status owner dueDate archived priority difficulty createdAt').lean(),
+    Task.find(taskFilter).select('project status owner assignees dueDate archived priority difficulty createdAt').lean(),
   ]);
   const now = Date.now();
   const ranked = rankTasks(tasks, now);
@@ -34,7 +34,7 @@ export async function getOverview(req, res) {
       ...project, taskCount: related.length, completed, active: active.length,
       overdue: active.filter(t => t.dueDate && new Date(t.dueDate).getTime() < now).length,
       blocked: active.filter(t => t.status === 'blocked').length,
-      unowned: active.filter(t => !t.owner).length,
+      unowned: active.filter(t => !t.owner && !t.assignees?.length).length,
       progress: related.length ? Math.round(completed / related.length * 100) : 0,
     };
   });
@@ -43,7 +43,7 @@ export async function getOverview(req, res) {
     const upcoming = list.filter(t => t.dueDate && new Date(t.dueDate).getTime() >= now).length;
     const undated = list.filter(t => !t.dueDate).length;
     const blocked = list.filter(t => t.status === 'blocked').length;
-    const unowned = list.filter(t => !t.owner).length;
+    const unowned = list.filter(t => !t.owner && !t.assignees?.length).length;
     const urgent = list.filter(t => ['Critical', 'High'].includes(t.priority)).length;
     const count = (n, singular, plural = `${singular}s`) => `${n} ${n === 1 ? singular : plural}`;
     const actions = [];
@@ -66,7 +66,7 @@ export async function getOverview(req, res) {
     active: ranked.length,
     overdue: ranked.filter(t => t.dueDate && new Date(t.dueDate).getTime() < now).length,
     blocked: ranked.filter(t => t.status === 'blocked').length,
-    unowned: ranked.filter(t => !t.owner).length,
+    unowned: ranked.filter(t => !t.owner && !t.assignees?.length).length,
     weekly: statement(weekly, 7),
     monthly: statement(monthly, 30),
     projects: summaries,

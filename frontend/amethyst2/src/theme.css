@@ -193,3 +193,5 @@
 @media (max-width: 700px) {
   .taskFreezeControls { left: 12px; right: 12px; gap: 4px; }
 }
+
+.site-lock-button { position: fixed; bottom: 16px; right: 16px; z-index: 100; padding: 8px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface, #fff); color: var(--text, #332849); cursor: pointer; }
