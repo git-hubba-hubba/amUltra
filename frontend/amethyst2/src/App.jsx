@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import CrystalLanding from './components/CrystalLanding/CrystalLanding';
-import SiteAccessGate from './features/auth/SiteAccessGate';
 import AuthGate from './features/auth/AuthGate';
 import Dashboard from './components/Dashboard';
 import './App.css';
@@ -23,6 +22,6 @@ export default function App() {
     <button className="theme-toggle" aria-pressed={theme === 'dark'} aria-label="Dark mode" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
       <span aria-hidden="true">{theme === 'dark' ? '☀' : '☾'}</span> {theme === 'dark' ? 'Light mode' : 'Dark mode'}
     </button>
-    <SiteAccessGate>{!entered ? <CrystalLanding onEnter={() => setEntered(true)} /> : <AuthGate>{(user, logout) => <Dashboard user={user} logout={logout} />}</AuthGate>}</SiteAccessGate>
+    {!entered ? <CrystalLanding onEnter={() => setEntered(true)} /> : <AuthGate>{(user, logout) => <Dashboard user={user} logout={logout} />}</AuthGate>}
   </div>;
 }

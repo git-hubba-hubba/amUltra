@@ -31,7 +31,7 @@ before(async () => {
   ];
   users = await User.create(specs.map(user => ({ organization: 'amethyst', role: 'member', status: 'active', passwordHash: hashPassword(password), ...user })));
   for (const user of users) {
-    const client = await siteClient();
+    const client = request.agent(app);
     await client.post('/api/auth/login').send({ email: user.email, password }).expect(200);
     clients[user.name] = client;
   }
@@ -45,8 +45,8 @@ after(async () => {
 const createTask = (overrides = {}) => Task.create({ organization: 'amethyst', department: 'Engineering', creator: users[0]._id, title: 'Test task', ...overrides });
 
 test('signup enables immediate workspace reads without granting admin rights; logout remains enforced', async () => {
-  await (await siteClient()).get('/api/tasks').expect(401);
-  const client = await siteClient();
+  await request.agent(app).get('/api/tasks').expect(401);
+  const client = request.agent(app);
   const signup = await client.post('/api/auth/signup').send({ name: 'New member', email: 'new@example.test', password, department: 'Engineering', role: 'admin', status: 'pending', organization: 'other-org', projectAdminIds: [id(users[0])] }).expect(201);
   assert.equal(signup.body.user.role, 'member');
   assert.equal(signup.body.user.status, 'active');
@@ -80,7 +80,7 @@ test('malformed stored passwords return a generic login rejection without creati
     for (const [name, passwordHash] of cases) {
       await t.test(name, async () => {
         await User.collection.updateOne({ _id: user._id }, passwordHash === undefined ? { $unset: { passwordHash: '' } } : { $set: { passwordHash } });
-        const response = await (await siteClient()).post('/api/auth/login').send({ email: user.email, password }).expect(401);
+        const response = await request.agent(app).post('/api/auth/login').send({ email: user.email, password }).expect(401);
         assert.deepEqual(response.body, { error: 'Invalid email or password' });
         assert.equal(response.headers['set-cookie'], undefined);
         assert.equal(await Session.countDocuments({ user: user._id }), 0);
@@ -95,7 +95,7 @@ test('malformed stored passwords return a generic login rejection without creati
 test('unknown email and incorrect password return the same rejection without creating sessions', async () => {
   const sessionCount = await Session.countDocuments();
   for (const email of ['unknown-login@example.test', users[2].email]) {
-    const response = await (await siteClient()).post('/api/auth/login').send({ email, password: 'incorrect-test-password' }).expect(401);
+    const response = await request.agent(app).post('/api/auth/login').send({ email, password: 'incorrect-test-password' }).expect(401);
     assert.deepEqual(response.body, { error: 'Invalid email or password' });
     assert.equal(response.headers['set-cookie'], undefined);
   }
@@ -273,7 +273,7 @@ test('cross-origin mutation requests are rejected', async () => {
 test('legacy pending accounts can log in and read other departments without account activation', async () => {
   const user = await User.create({ organization: 'amethyst', name: 'Legacy reader', email: 'legacy-reader@example.test', department: 'Engineering', status: 'pending', passwordHash: hashPassword(password) });
   const task = await createTask({ title: 'Finance read access', department: 'Finance' });
-  const client = await siteClient();
+  const client = request.agent(app);
   const result = await client.post('/api/auth/login').send({ email: user.email, password }).expect(200);
   assert.equal(result.body.status, 'active');
   assert.equal(result.body.role, 'member');
@@ -395,7 +395,7 @@ test('screenshot data maps to linked components, disables directory logins, and 
   // Even a valid stored password must not turn a directory entry into a login.
   directory.passwordHash = hashPassword(password);
   await directory.save();
-  await (await siteClient()).post('/api/auth/login').send({ email: directory.email, password }).expect(401);
+  await request.agent(app).post('/api/auth/login').send({ email: directory.email, password }).expect(401);
   avpTask.title = 'User-edited source task';
   await avpTask.save();
   const repeat = await seedScreenshots('screenshot-test');
@@ -485,7 +485,7 @@ test('roadmap uploads create entries atomically and enforce admin scope', async 
 test('any workspace member can freeze and resume while other edits remain protected', async () => {
   const task = await createTask({ creator: users[2]._id, title: 'Freeze production', status: 'in_progress' });
   const path = `/api/tasks/${id(task)}`;
-  await (await siteClient()).patch(path).send({ frozen: true, __v: task.__v }).expect(401);
+  await request.agent(app).patch(path).send({ frozen: true, __v: task.__v }).expect(401);
   for (const extra of [{ title: 'Unauthorized edit' }, { status: 'done' }, { owner: id(users[3]) }, { department: 'Sales' }]) {
     await clients.Bob.patch(path).send({ frozen: true, __v: task.__v, ...extra }).expect(403);
   }
@@ -621,11 +621,3 @@ test('notes and spreadsheet uploads retain multiple delegates on drafts and publ
  const task = await Task.findById(upload.body.items[0].task);
  assert.deepEqual(task.assignees.map(String), assignees);
 });
-
-
-async function siteClient() {
- const client = request.agent(app);
- const unlocked = await client.post('/api/site-access/unlock').send({ code: '214723' }).expect(200);
- client.siteCookie = unlocked.headers['set-cookie'][0].split(';')[0];
- return client;
-}
